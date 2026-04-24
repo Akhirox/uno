@@ -21,6 +21,21 @@ let pendingDrawnCards = [];
 let stateQueue = []; 
 let isAnimating = false;
 
+// --- CONFIGURATION RESEAU P2P ---
+// On force les serveurs STUN de Google pour aider à traverser les routeurs/box internet
+const peerConfig = {
+    config: {
+        'iceServers': [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' }
+        ]
+    },
+    debug: 2 // Affiche les logs réseau dans la console (F12) pour t'aider à débugger
+};
+
 // État Global du jeu
 let gameState = {
     status: 'LOBBY',
@@ -112,79 +127,87 @@ function flyCard(startEl, endEl, cardFile) {
     });
 }
 
+// MOTEUR D'ETAT BLINDÉ
 async function processStateQueue() {
     if(isAnimating || stateQueue.length === 0) return;
     isAnimating = true;
     
-    const payload = stateQueue.shift();
-    const nextState = payload.state;
-    const action = payload.action;
+    try {
+        const payload = stateQueue.shift();
+        const nextState = payload.state;
+        const action = payload.action;
 
-    if (nextState.status === 'LOBBY') {
-        gameState = nextState;
-        updateLobbyUI();
-        isAnimating = false;
-        processStateQueue();
-        return;
-    }
+        // Gestion absolue du Lobby
+        if (nextState.status === 'LOBBY') {
+            gameState = nextState;
+            updateLobbyUI();
+            isAnimating = false;
+            processStateQueue();
+            return;
+        }
 
-    // LE CORRECTIF EST ICI : Fait passer les clients dans la partie visuellement !
-    if (gameState.status === 'LOBBY' && nextState.status === 'PLAYING') {
-        showGameScreen();
-    }
-
-    if (action) {
-        if (action.type === 'PLAY') {
-            const isMe = action.playerId === myPeer.id;
-            const startEl = isMe ? document.getElementById('my-avatar') : document.getElementById(`avatar-${action.playerId}`);
-            const endEl = document.getElementById('discard-pile');
-            await flyCard(startEl, endEl, action.card);
-        } 
-        else if (action.type === 'DRAW') {
-            const startEl = document.getElementById('draw-pile');
-            const isMe = action.playerId === myPeer.id;
-            const endEl = isMe ? document.getElementById('my-avatar') : document.getElementById(`avatar-${action.playerId}`);
-            for(let i=0; i<action.amount; i++) {
-                flyCard(startEl, endEl, CARD_BACK);
-                await new Promise(r => setTimeout(r, 150)); 
-            }
-            await new Promise(r => setTimeout(r, 300)); 
-        }
-        else if (action.type === 'UNO_CALLED') {
-            const p = nextState.players[action.playerId];
-            showBigMessage(p.avatar, "UNO !", `${p.pseudo} a dit UNO !`);
-            await new Promise(r => setTimeout(r, 2000));
-        }
-        else if (action.type === 'SUCCESSFUL_DENOUNCE') {
-            const denouncer = nextState.players[action.denouncerId];
-            const target = nextState.players[action.targetId];
-            showBigMessage(denouncer.avatar, "DÉNONCÉ !", `${denouncer.pseudo} a dénoncé ${target.pseudo} !`);
-            await new Promise(r => setTimeout(r, 2500));
-            
-            const startEl = document.getElementById('draw-pile');
-            const isMe = action.targetId === myPeer.id;
-            const endEl = isMe ? document.getElementById('my-avatar') : document.getElementById(`avatar-${action.targetId}`);
-            for(let i=0; i<4; i++) {
-                flyCard(startEl, endEl, CARD_BACK);
-                await new Promise(r => setTimeout(r, 150));
-            }
-            await new Promise(r => setTimeout(r, 300));
-        }
-        else if (action.type === 'WIN') {
-            const winner = nextState.players[action.playerId];
-            showEndScreen(winner);
-        }
-        else if (action.type === 'RESTART') {
-            document.getElementById('end-screen').classList.remove('show');
-            setTimeout(() => { document.getElementById('end-screen').style.display = 'none'; }, 300);
-            showToast("La partie recommence !");
+        // Force la transition vers le jeu
+        if ((gameState.status === 'LOBBY' && nextState.status === 'PLAYING') || (action && action.type === 'START_GAME')) {
             showGameScreen();
         }
-    }
-    
-    gameState = nextState;
-    if (gameState.status === 'PLAYING' || gameState.status === 'FINISHED') {
-        updateUI();
+
+        // Animations conditionnelles
+        if (action) {
+            if (action.type === 'PLAY') {
+                const isMe = action.playerId === myPeer.id;
+                const startEl = isMe ? document.getElementById('my-avatar') : document.getElementById(`avatar-${action.playerId}`);
+                const endEl = document.getElementById('discard-pile');
+                await flyCard(startEl, endEl, action.card);
+            } 
+            else if (action.type === 'DRAW') {
+                const startEl = document.getElementById('draw-pile');
+                const isMe = action.playerId === myPeer.id;
+                const endEl = isMe ? document.getElementById('my-avatar') : document.getElementById(`avatar-${action.playerId}`);
+                for(let i=0; i<action.amount; i++) {
+                    flyCard(startEl, endEl, CARD_BACK);
+                    await new Promise(r => setTimeout(r, 150)); 
+                }
+                await new Promise(r => setTimeout(r, 300)); 
+            }
+            else if (action.type === 'UNO_CALLED') {
+                const p = nextState.players[action.playerId];
+                showBigMessage(p.avatar, "UNO !", `${p.pseudo} a dit UNO !`);
+                await new Promise(r => setTimeout(r, 2000));
+            }
+            else if (action.type === 'SUCCESSFUL_DENOUNCE') {
+                const denouncer = nextState.players[action.denouncerId];
+                const target = nextState.players[action.targetId];
+                showBigMessage(denouncer.avatar, "DÉNONCÉ !", `${denouncer.pseudo} a dénoncé ${target.pseudo} !`);
+                await new Promise(r => setTimeout(r, 2500));
+                
+                const startEl = document.getElementById('draw-pile');
+                const isMe = action.targetId === myPeer.id;
+                const endEl = isMe ? document.getElementById('my-avatar') : document.getElementById(`avatar-${action.targetId}`);
+                for(let i=0; i<4; i++) {
+                    flyCard(startEl, endEl, CARD_BACK);
+                    await new Promise(r => setTimeout(r, 150));
+                }
+                await new Promise(r => setTimeout(r, 300));
+            }
+            else if (action.type === 'WIN') {
+                const winner = nextState.players[action.playerId];
+                showEndScreen(winner);
+            }
+            else if (action.type === 'RESTART') {
+                document.getElementById('end-screen').classList.remove('show');
+                setTimeout(() => { document.getElementById('end-screen').style.display = 'none'; }, 300);
+                showToast("La partie recommence !");
+                showGameScreen();
+            }
+        }
+        
+        gameState = nextState;
+        if (gameState.status === 'PLAYING' || gameState.status === 'FINISHED') {
+            updateUI();
+        }
+
+    } catch (error) {
+        console.error("Erreur critique évitée dans la file d'attente :", error);
     }
     
     isAnimating = false;
@@ -240,9 +263,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-restart-game').addEventListener('click', restartGameHost);
 });
 
+// FONCTIONS D'AFFICHAGE BLINDÉES
 function showLobbyScreen() {
-    document.getElementById('menu-screen').classList.remove('active');
-    document.getElementById('game-screen').classList.remove('active');
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById('lobby-screen').classList.add('active');
     document.getElementById('lobby-title').innerText = "Salle d'attente - Lobby " + currentLobbyId;
 
@@ -253,6 +276,13 @@ function showLobbyScreen() {
         document.getElementById('btn-start-game').style.display = 'none';
         document.getElementById('lobby-waiting-text').style.display = 'block';
     }
+}
+
+function showGameScreen() {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('game-screen').classList.add('active');
+    document.getElementById('my-pseudo').innerText = myPseudo;
+    document.getElementById('my-avatar').src = `assets/avatars/${myAvatar}`;
 }
 
 function updateLobbyUI() {
@@ -268,13 +298,14 @@ function updateLobbyUI() {
     });
 }
 
-// --- PEERJS: CONNEXION ---
+// --- PEERJS: CONNEXION AVEC CONFIGURATION ROBUSTE ---
 function joinLobby(lobbyNumber) {
     const statusText = document.getElementById('connection-status');
     statusText.innerText = "Connexion en cours...";
     const targetLobbyId = LOBBY_PREFIX + lobbyNumber;
 
-    myPeer = new Peer(targetLobbyId);
+    // Tentative de devenir l'hôte avec la config STUN
+    myPeer = new Peer(targetLobbyId, peerConfig);
 
     myPeer.on('open', (id) => {
         isHost = true;
@@ -283,8 +314,11 @@ function joinLobby(lobbyNumber) {
     });
 
     myPeer.on('error', (err) => {
+        console.error("PeerJS Error:", err); // Utile pour débugger avec F12
+
         if (err.type === 'unavailable-id') {
-            myPeer = new Peer();
+            // L'ID est pris, le lobby existe, on se connecte en client (avec config STUN aussi)
+            myPeer = new Peer(peerConfig);
             myPeer.on('open', (myId) => {
                 hostConnection = myPeer.connect(targetLobbyId, { reliable: true });
                 
@@ -292,9 +326,14 @@ function joinLobby(lobbyNumber) {
                     hostConnection.send({ type: 'JOIN', data: { pseudo: myPseudo, avatar: myAvatar } });
                 });
                 hostConnection.on('data', handleStatePayload);
+                
+                hostConnection.on('error', (connErr) => {
+                    console.error("Erreur de connexion à l'hôte :", connErr);
+                    statusText.innerText = "Erreur de connexion à l'hôte.";
+                });
             });
         } else {
-            statusText.innerText = "Erreur : " + err.type;
+            statusText.innerText = "Erreur réseau: " + err.type;
         }
     });
 
@@ -322,6 +361,9 @@ function addPlayerToState(id, pseudo, avatar) {
 }
 
 function startGameHost() {
+    // Sécurité Anti Double-Clic
+    if (gameState.status !== 'LOBBY') return; 
+
     gameState.status = 'PLAYING';
     gameState.deck = shuffle(generateDeck());
     
@@ -339,7 +381,7 @@ function startGameHost() {
     gameState.currentColor = parsedFirst.color === 'none' ? 'red' : parsedFirst.color; 
     gameState.currentValue = parsedFirst.value;
 
-    broadcastState();
+    broadcastState({ type: 'START_GAME' });
     showGameScreen();
 }
 
@@ -527,98 +569,100 @@ function broadcastState(action = null) {
 }
 
 // --- LOGIQUE CLIENT & UI ---
-function showGameScreen() {
-    document.getElementById('lobby-screen').classList.remove('active');
-    document.getElementById('game-screen').classList.add('active');
-    document.getElementById('my-pseudo').innerText = myPseudo;
-    document.getElementById('my-avatar').src = `assets/avatars/${myAvatar}`;
-}
-
 function updateUI() {
-    if(gameState.status !== 'PLAYING' && gameState.status !== 'FINISHED') return;
+    try {
+        if(gameState.status !== 'PLAYING' && gameState.status !== 'FINISHED') return;
 
-    if(gameState.discardPile.length > 0) {
-        const topCard = gameState.discardPile[gameState.discardPile.length - 1];
-        document.getElementById('discard-pile').innerHTML = `<div class="card" style="background-image: url('${ASSETS_PATH}${topCard}')"></div>`;
-    }
-    
-    const colorInd = document.getElementById('current-color-indicator');
-    if(gameState.currentColor) {
-        colorInd.style.display = 'block';
-        const colorMap = { 'red':'#c1272d', 'blue':'#005a9e', 'green':'#2b7a0b', 'yellow':'#f7b731' };
-        colorInd.style.backgroundColor = colorMap[gameState.currentColor];
-    }
-
-    const currentTurnId = gameState.playerOrder[gameState.currentTurnIndex];
-    const myId = myPeer.id; 
-    const isMyTurn = currentTurnId === myId;
-
-    document.getElementById('turn-indicator').innerText = isMyTurn ? "C'est ton tour !" : `Tour de ${gameState.players[currentTurnId].pseudo}`;
-    
-    const myInfoBlock = document.getElementById('my-player-info');
-    isMyTurn ? myInfoBlock.classList.add('active-turn') : myInfoBlock.classList.remove('active-turn');
-
-    const myPlayerInfo = gameState.players[myId];
-    const btnUno = document.getElementById('btn-say-uno');
-    if (myPlayerInfo && myPlayerInfo.handCount === 1 && !myPlayerInfo.unoVulnerable) {
-        btnUno.style.backgroundColor = '#2b7a0b'; 
-        btnUno.innerText = "PROTÉGÉ";
-        btnUno.disabled = true;
-    } else {
-        btnUno.style.backgroundColor = ''; 
-        btnUno.innerText = "UNO !";
-        btnUno.disabled = false;
-    }
-
-    const oppContainer = document.getElementById('opponents-container');
-    oppContainer.innerHTML = '';
-    
-    const opponents = gameState.playerOrder.filter(id => id !== myId);
-    const oppCount = opponents.length;
-
-    opponents.forEach((id, index) => {
-        const p = gameState.players[id];
-        const isTurn = id === currentTurnId;
-        const isProtected = p.handCount === 1 && !p.unoVulnerable;
+        if(gameState.discardPile.length > 0) {
+            const topCard = gameState.discardPile[gameState.discardPile.length - 1];
+            document.getElementById('discard-pile').innerHTML = `<div class="card" style="background-image: url('${ASSETS_PATH}${topCard}')"></div>`;
+        }
         
-        const minAngle = 20;
-        const maxAngle = 160;
-        let angle = 90;
-        if (oppCount > 1) {
-            angle = maxAngle - ((maxAngle - minAngle) / (oppCount - 1)) * index;
-        }
-        const rad = angle * (Math.PI / 180);
-        const leftPercent = 50 + 40 * Math.cos(rad);
-        const topPercent = 35 - 30 * Math.sin(rad); 
-
-        const oppDiv = document.createElement('div');
-        oppDiv.className = `opponent ${isTurn ? 'active-turn' : ''}`;
-        oppDiv.style.left = `${leftPercent}%`;
-        oppDiv.style.top = `${topPercent}%`;
-
-        let cardsHTML = '';
-        for(let i=0; i<p.handCount; i++) {
-            cardsHTML += `<div class="mini-card"></div>`;
+        const colorInd = document.getElementById('current-color-indicator');
+        if(gameState.currentColor) {
+            colorInd.style.display = 'block';
+            const colorMap = { 'red':'#c1272d', 'blue':'#005a9e', 'green':'#2b7a0b', 'yellow':'#f7b731' };
+            colorInd.style.backgroundColor = colorMap[gameState.currentColor];
         }
 
-        const badgeHTML = isProtected ? `<div class="uno-protected-badge">UNO!</div>` : '';
-        const denounceDisabled = !p.unoVulnerable || p.handCount !== 1 ? 'disabled' : '';
+        const currentTurnId = gameState.playerOrder[gameState.currentTurnIndex];
+        const myId = myPeer.id; 
+        const isMyTurn = currentTurnId === myId;
 
-        oppDiv.innerHTML = `
-            <div style="position: relative;">
-                <img id="avatar-${id}" src="assets/avatars/${p.avatar}" alt="${p.pseudo}">
-                ${badgeHTML}
-            </div>
-            <div class="opponent-info">
-                <span class="glow">${p.pseudo}</span>
-                <div class="opponent-hand">${cardsHTML}</div>
-                <button class="btn-uno" onclick="denounceUno('${id}')" ${denounceDisabled}>Dénoncer</button>
-            </div>
-        `;
-        oppContainer.appendChild(oppDiv);
-    });
+        // Si currentTurnId existe bien, on affiche le pseudo
+        if (gameState.players[currentTurnId]) {
+            document.getElementById('turn-indicator').innerText = isMyTurn ? "C'est ton tour !" : `Tour de ${gameState.players[currentTurnId].pseudo}`;
+        }
+        
+        const myInfoBlock = document.getElementById('my-player-info');
+        isMyTurn ? myInfoBlock.classList.add('active-turn') : myInfoBlock.classList.remove('active-turn');
 
-    renderMyHand();
+        const myPlayerInfo = gameState.players[myId];
+        const btnUno = document.getElementById('btn-say-uno');
+        if (myPlayerInfo && myPlayerInfo.handCount === 1 && !myPlayerInfo.unoVulnerable) {
+            btnUno.style.backgroundColor = '#2b7a0b'; 
+            btnUno.innerText = "PROTÉGÉ";
+            btnUno.disabled = true;
+        } else {
+            btnUno.style.backgroundColor = ''; 
+            btnUno.innerText = "UNO !";
+            btnUno.disabled = false;
+        }
+
+        const oppContainer = document.getElementById('opponents-container');
+        oppContainer.innerHTML = '';
+        
+        const opponents = gameState.playerOrder.filter(id => id !== myId);
+        const oppCount = opponents.length;
+
+        opponents.forEach((id, index) => {
+            const p = gameState.players[id];
+            if (!p) return; // Sécurité
+
+            const isTurn = id === currentTurnId;
+            const isProtected = p.handCount === 1 && !p.unoVulnerable;
+            
+            const minAngle = 20;
+            const maxAngle = 160;
+            let angle = 90;
+            if (oppCount > 1) {
+                angle = maxAngle - ((maxAngle - minAngle) / (oppCount - 1)) * index;
+            }
+            const rad = angle * (Math.PI / 180);
+            const leftPercent = 50 + 40 * Math.cos(rad);
+            const topPercent = 35 - 30 * Math.sin(rad); 
+
+            const oppDiv = document.createElement('div');
+            oppDiv.className = `opponent ${isTurn ? 'active-turn' : ''}`;
+            oppDiv.style.left = `${leftPercent}%`;
+            oppDiv.style.top = `${topPercent}%`;
+
+            let cardsHTML = '';
+            for(let i=0; i<p.handCount; i++) {
+                cardsHTML += `<div class="mini-card"></div>`;
+            }
+
+            const badgeHTML = isProtected ? `<div class="uno-protected-badge">UNO!</div>` : '';
+            const denounceDisabled = !p.unoVulnerable || p.handCount !== 1 ? 'disabled' : '';
+
+            oppDiv.innerHTML = `
+                <div style="position: relative;">
+                    <img id="avatar-${id}" src="assets/avatars/${p.avatar}" alt="${p.pseudo}">
+                    ${badgeHTML}
+                </div>
+                <div class="opponent-info">
+                    <span class="glow">${p.pseudo}</span>
+                    <div class="opponent-hand">${cardsHTML}</div>
+                    <button class="btn-uno" onclick="denounceUno('${id}')" ${denounceDisabled}>Dénoncer</button>
+                </div>
+            `;
+            oppContainer.appendChild(oppDiv);
+        });
+
+        renderMyHand();
+    } catch (e) {
+        console.error("Erreur bloquante dans updateUI réparée :", e);
+    }
 }
 
 function renderMyHand() {
