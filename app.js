@@ -120,13 +120,17 @@ async function processStateQueue() {
     const nextState = payload.state;
     const action = payload.action;
 
-    // Si on a un état "LOBBY", on ne passe pas par les animations en jeu
     if (nextState.status === 'LOBBY') {
         gameState = nextState;
         updateLobbyUI();
         isAnimating = false;
         processStateQueue();
         return;
+    }
+
+    // LE CORRECTIF EST ICI : Fait passer les clients dans la partie visuellement !
+    if (gameState.status === 'LOBBY' && nextState.status === 'PLAYING') {
+        showGameScreen();
     }
 
     if (action) {
@@ -196,7 +200,7 @@ function handleStatePayload(payload) {
     else if (payload.type === 'RECEIVE_CARDS') {
         if (payload.data.override) {
             myHand = [...payload.data.cards];
-            pendingDrawnCards = []; // Reset en cas de restart
+            pendingDrawnCards = []; 
         } else {
             pendingDrawnCards.push(...payload.data.cards);
             myHand.push(...payload.data.cards);
@@ -324,7 +328,7 @@ function startGameHost() {
     gameState.playerOrder.forEach(id => {
         const hand = gameState.deck.splice(-7);
         gameState.players[id].handCount = 7;
-        sendCards(id, hand, true); // true = override
+        sendCards(id, hand, true); 
     });
 
     let firstCard;
@@ -452,7 +456,6 @@ function processPlayCard(playerId, cardPlayed, chosenColor, declaredUno) {
         skipNext = true;
     }
     
-    // On broadcast d'abord le coup joué
     broadcastState({ type: 'PLAY', playerId, card: cardPlayed });
 
     if(triggerUnoCall) {
@@ -463,7 +466,6 @@ function processPlayCard(playerId, cardPlayed, chosenColor, declaredUno) {
         broadcastState({ type: 'WIN', playerId: playerId });
     } else if (gameState.status === 'PLAYING') {
         advanceTurn(skipNext ? 2 : 1);
-        // On broadcast un update vide pour actualiser l'UI du prochain joueur
         broadcastState();
     }
 }
