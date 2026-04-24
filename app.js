@@ -33,6 +33,26 @@ let gameState = {
     currentValue: ''
 };
 
+// --- UTILITAIRES UI (Toasts & Big Messages) ---
+function showToast(message) {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = 'toast glow';
+    toast.innerText = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+function showBigMessage(avatar, title, desc) {
+    const overlay = document.getElementById('big-message-overlay');
+    document.getElementById('big-msg-img').src = `assets/avatars/${avatar}`;
+    document.getElementById('big-msg-title').innerText = title;
+    document.getElementById('big-msg-desc').innerText = desc;
+    overlay.classList.add('show');
+    setTimeout(() => overlay.classList.remove('show'), 3500); 
+}
+
+
 // --- UTILITAIRES CARTES ---
 function parseCard(filename) {
     if(filename.includes('wild_plus4')) return { color: 'none', value: 'plus4', type: 'wild' };
@@ -102,13 +122,32 @@ async function processStateQueue() {
             const startEl = document.getElementById('draw-pile');
             const isMe = action.playerId === myPeer.id;
             const endEl = isMe ? document.getElementById('my-avatar') : document.getElementById(`avatar-${action.playerId}`);
-            
             for(let i=0; i<action.amount; i++) {
-                const cardImage = (isMe && pendingDrawnCards.length > 0) ? pendingDrawnCards.shift() : CARD_BACK;
-                flyCard(startEl, endEl, cardImage);
+                flyCard(startEl, endEl, CARD_BACK);
                 await new Promise(r => setTimeout(r, 150)); 
             }
             await new Promise(r => setTimeout(r, 300)); 
+        }
+        else if (action.type === 'UNO_CALLED') {
+            const p = nextState.players[action.playerId];
+            showBigMessage(p.avatar, "UNO !", `${p.pseudo} a dit UNO !`);
+            await new Promise(r => setTimeout(r, 2000));
+        }
+        else if (action.type === 'SUCCESSFUL_DENOUNCE') {
+            const denouncer = nextState.players[action.denouncerId];
+            const target = nextState.players[action.targetId];
+            showBigMessage(denouncer.avatar, "DÉNONCÉ !", `${denouncer.pseudo} a dénoncé ${target.pseudo} !`);
+            await new Promise(r => setTimeout(r, 2500));
+            
+            // Animation des 4 cartes de pénalité
+            const startEl = document.getElementById('draw-pile');
+            const isMe = action.targetId === myPeer.id;
+            const endEl = isMe ? document.getElementById('my-avatar') : document.getElementById(`avatar-${action.targetId}`);
+            for(let i=0; i<4; i++) {
+                flyCard(startEl, endEl, CARD_BACK);
+                await new Promise(r => setTimeout(r, 150));
+            }
+            await new Promise(r => setTimeout(r, 300));
         }
     }
     
@@ -119,11 +158,16 @@ async function processStateQueue() {
 }
 
 function handleStatePayload(payload) {
-    if (payload.type === 'RECEIVE_CARDS') {
+    if (payload.type === 'DIRECT_ACTION') {
+        if (payload.data.type === 'TOAST') {
+            showToast(payload.data.message);
+        }
+    }
+    else if (payload.type === 'RECEIVE_CARDS') {
         pendingDrawnCards.push(...payload.data.cards);
         myHand.push(...payload.data.cards);
     }
-    if (payload.type === 'STATE_UPDATE') {
+    else if (payload.type === 'STATE_UPDATE') {
         stateQueue.push(payload.data);
         processStateQueue();
     }
@@ -199,6 +243,14 @@ function joinLobby(lobbyNumber) {
 }
 
 // --- LOGIQUE HÔTE ---
+function sendDirectAction(targetId, action) {
+    if (targetId === myPeer.id) {
+        handleStatePayload({ type: 'DIRECT_ACTION', data: action });
+    } else {
+        connections[targetId].send({ type: 'DIRECT_ACTION', data: action });
+    }
+}
+
 function addPlayerToState(id, pseudo, avatar) {
     gameState.players[id] = { pseudo, avatar, handCount: 0, unoVulnerable: false };
     if(!gameState.playerOrder.includes(id)) gameState.playerOrder.push(id);
@@ -233,18 +285,29 @@ function handleDataFromClient(clientId, payload) {
 
     if (payload.type === 'PLAY_CARD') processPlayCard(clientId, payload.data.card, payload.data.chosenColor);
     if (payload.type === 'DRAW_CARD') processDrawCard(clientId);
+    
     if (payload.type === 'SAY_UNO') {
         gameState.players[clientId].unoVulnerable = false;
-        broadcastState();
+        broadcastState({ type: 'UNO_CALLED', playerId: clientId });
     }
+    
     if (payload.type === 'DENOUNCE_UNO') {
         const targetId = payload.data.targetId;
-        if(gameState.players[targetId].unoVulnerable) {
+        const targetPlayer = gameState.players[targetId];
+
+        if (targetPlayer.handCount > 1) {
+            sendDirectAction(clientId, { type: 'TOAST', message: `${targetPlayer.pseudo} a plus d'une carte` });
+        } 
+        else if (!targetPlayer.unoVulnerable) {
+            sendDirectAction(clientId, { type: 'TOAST', message: `${targetPlayer.pseudo} a déjà dit UNO !` });
+        } 
+        else {
+            // Dénonciation réussie
             const penalties = drawCardsFromDeck(4);
-            gameState.players[targetId].handCount += 4;
-            gameState.players[targetId].unoVulnerable = false;
+            targetPlayer.handCount += 4;
+            targetPlayer.unoVulnerable = false;
             sendCards(targetId, penalties);
-            broadcastState({ type: 'DRAW', playerId: targetId, amount: 4 });
+            broadcastState({ type: 'SUCCESSFUL_DENOUNCE', denouncerId: clientId, targetId: targetId });
         }
     }
 }
@@ -395,7 +458,6 @@ function updateUI() {
         const p = gameState.players[id];
         const isTurn = id === currentTurnId;
         
-        // Calcul pour placer en arc de cercle
         const minAngle = 20;
         const maxAngle = 160;
         let angle = 90;
@@ -404,14 +466,13 @@ function updateUI() {
         }
         const rad = angle * (Math.PI / 180);
         const leftPercent = 50 + 40 * Math.cos(rad);
-        const topPercent = 35 - 30 * Math.sin(rad); // On les garde bien espacés du centre
+        const topPercent = 35 - 30 * Math.sin(rad); 
 
         const oppDiv = document.createElement('div');
         oppDiv.className = `opponent ${isTurn ? 'active-turn' : ''}`;
         oppDiv.style.left = `${leftPercent}%`;
         oppDiv.style.top = `${topPercent}%`;
 
-        // Génération des mini-cartes
         let cardsHTML = '';
         for(let i=0; i<p.handCount; i++) {
             cardsHTML += `<div class="mini-card"></div>`;
@@ -422,7 +483,7 @@ function updateUI() {
             <div class="opponent-info">
                 <span class="glow">${p.pseudo}</span>
                 <div class="opponent-hand">${cardsHTML}</div>
-                <button class="btn-uno" onclick="denounceUno('${id}')" ${!p.unoVulnerable ? 'disabled' : ''}>Dénoncer</button>
+                <button class="btn-uno" onclick="denounceUno('${id}')">Dénoncer</button>
             </div>
         `;
         oppContainer.appendChild(oppDiv);
@@ -491,9 +552,13 @@ document.getElementById('draw-pile').addEventListener('click', () => {
     }
 });
 
+// NOUVEAU FEEDBACK BOUTON UNO
 document.getElementById('btn-say-uno').addEventListener('click', () => {
-    amIProtectedUNO = true;
-    if(myHand.length === 1 || myHand.length === 2) {
+    // Règle : on doit avoir 1 carte, ou être sur le point de jouer (2 cartes)
+    if(myHand.length > 2) {
+        showToast("Vous avez trop de cartes");
+    } else {
+        amIProtectedUNO = true;
         sendAction({ type: 'SAY_UNO' });
     }
 });
