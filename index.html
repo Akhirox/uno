@@ -39,8 +39,20 @@
                 </div>
             </div>
             
-            <button id="btn-start-game" class="btn-lobby" style="display:none; width: 100%; margin-top: 15px;">Lancer la partie (Hôte)</button>
             <p id="connection-status"></p>
+        </div>
+    </div>
+
+    <div id="lobby-screen" class="screen">
+        <div class="menu-container">
+            <h1 class="glow">Salle d'attente</h1>
+            <h3 id="lobby-title" style="margin-bottom: 20px; color: var(--text);">Lobby X</h3>
+            
+            <div id="lobby-players-list" class="lobby-players">
+                </div>
+
+            <button id="btn-start-game" class="btn-lobby" style="display:none; width: 100%; margin-top: 20px; background: #2b7a0b;">Lancer la partie</button>
+            <p id="lobby-waiting-text" style="display:none; margin-top:20px; font-weight: bold;" class="glow">En attente de l'hôte...</p>
         </div>
     </div>
 
@@ -79,6 +91,17 @@
                 <button class="color-btn" style="background-color: #c1272d;" data-color="red"></button>
                 <button class="color-btn" style="background-color: #f7b731;" data-color="yellow"></button>
             </div>
+        </div>
+    </div>
+
+    <div id="end-screen" class="modal-overlay" style="display: none; z-index: 4000;">
+        <div class="big-message-content" style="border-color: #f7b731; box-shadow: 0 0 50px #f7b731;">
+            <h2 style="color: #f7b731; text-shadow: 0 0 20px #f7b731;">VICTOIRE !</h2>
+            <img id="winner-img" src="" alt="Vainqueur">
+            <p id="winner-name" style="font-size: 2rem; color: #fff;"></p>
+            
+            <button id="btn-restart-game" class="btn-lobby" style="display:none; margin-top: 20px; font-size: 1.2rem; padding: 15px 30px;">Relancer la partie</button>
+            <p id="end-waiting-text" style="display:none; margin-top:20px; font-style: italic; color: #aaa;">En attente de l'hôte pour rejouer...</p>
         </div>
     </div>
 

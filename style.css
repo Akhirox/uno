@@ -13,8 +13,8 @@ body { background-color: var(--bg-color); color: var(--text); overflow: hidden; 
 
 .glow { text-shadow: 0 0 10px var(--primary), 0 0 20px var(--primary); color: var(--primary); font-weight: bold; }
 
-/* MENU */
-#menu-screen { justify-content: center; align-items: center; }
+/* MENU & LOBBY */
+#menu-screen, #lobby-screen { justify-content: center; align-items: center; background: radial-gradient(circle, #1a1510 0%, #0d0d0d 100%);}
 .menu-container { background: #1a1a1a; padding: 30px; border-radius: 12px; box-shadow: 0 0 20px rgba(255, 140, 0, 0.2); width: 400px; text-align: center; border: 1px solid #331f00; }
 .menu-container h1 { margin-bottom: 20px; font-size: 2.5rem; }
 .form-group { margin-bottom: 20px; text-align: left; }
@@ -28,6 +28,12 @@ input[type="text"] { width: 100%; padding: 10px; border-radius: 6px; border: 1px
 .btn-lobby { flex: 1; padding: 10px; background: var(--primary); color: #000; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s; text-transform: uppercase; letter-spacing: 1px;}
 .btn-lobby:hover { background: #ffaa33; box-shadow: 0 0 10px var(--primary); transform: scale(1.05);}
 #connection-status { margin-top: 15px; font-style: italic; color: #ffaa33; }
+
+/* Liste des joueurs (Salle d'attente) */
+.lobby-players { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; max-height: 300px; overflow-y: auto; text-align: left;}
+.lobby-player-item { display: flex; align-items: center; gap: 15px; background: rgba(0,0,0,0.6); padding: 10px 15px; border-radius: 8px; border: 1px solid #444; }
+.lobby-player-item img { width: 45px; height: 45px; border-radius: 50%; border: 2px solid var(--primary); object-fit: cover; }
+.lobby-player-item span { font-weight: bold; font-size: 1.1rem; color: #fff;}
 
 /* JEU */
 #game-screen { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle, #1a1510 0%, #0d0d0d 100%); }
@@ -95,10 +101,10 @@ input[type="text"] { width: 100%; padding: 10px; border-radius: 6px; border: 1px
 @keyframes fadein { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fadeout { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(20px); } }
 
-#big-message-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; display: flex; justify-content: center; align-items: center; z-index: 3000; opacity: 0; transition: opacity 0.3s; background: rgba(0,0,0,0.7); }
-#big-message-overlay.show { opacity: 1; pointer-events: auto; }
+#big-message-overlay, #end-screen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; display: flex; justify-content: center; align-items: center; z-index: 3000; opacity: 0; transition: opacity 0.3s; background: rgba(0,0,0,0.85); }
+#big-message-overlay.show, #end-screen.show { opacity: 1; pointer-events: auto; }
 .big-message-content { background: radial-gradient(circle, #2a1a00 0%, #000 100%); border: 2px solid var(--primary); padding: 50px 80px; border-radius: 20px; text-align: center; box-shadow: 0 0 50px var(--primary); display: flex; flex-direction: column; align-items: center; gap: 20px; transform: scale(0.8); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-#big-message-overlay.show .big-message-content { transform: scale(1); }
+#big-message-overlay.show .big-message-content, #end-screen.show .big-message-content { transform: scale(1); }
 .big-message-content img { width: 140px; height: 140px; border-radius: 50%; border: 4px solid var(--primary); box-shadow: 0 0 20px var(--primary); object-fit: cover; }
 .big-message-content h2 { font-size: 4rem; text-transform: uppercase; margin: 0; }
 .big-message-content p { font-size: 1.5rem; color: #fff; margin: 0; font-weight: bold;}

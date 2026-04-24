@@ -7,6 +7,7 @@ let myPseudo = '';
 let myAvatar = '';
 let myPeer = null;
 let isHost = false;
+let currentLobbyId = '';
 
 // Variables Hôte
 let connections = {}; 
@@ -15,7 +16,7 @@ let clients = [];
 // Variables Client & Animations
 let hostConnection = null;
 let myHand = [];
-let amIProtectedUNO = false; // Etat "préparé"
+let amIProtectedUNO = false; 
 let pendingDrawnCards = []; 
 let stateQueue = []; 
 let isAnimating = false;
@@ -50,6 +51,23 @@ function showBigMessage(avatar, title, desc) {
     document.getElementById('big-msg-desc').innerText = desc;
     overlay.classList.add('show');
     setTimeout(() => overlay.classList.remove('show'), 3500); 
+}
+
+function showEndScreen(player) {
+    const overlay = document.getElementById('end-screen');
+    document.getElementById('winner-img').src = `assets/avatars/${player.avatar}`;
+    document.getElementById('winner-name').innerText = `${player.pseudo} remporte la partie !`;
+
+    if (isHost) {
+        document.getElementById('btn-restart-game').style.display = 'block';
+        document.getElementById('end-waiting-text').style.display = 'none';
+    } else {
+        document.getElementById('btn-restart-game').style.display = 'none';
+        document.getElementById('end-waiting-text').style.display = 'block';
+    }
+
+    overlay.style.display = 'flex';
+    setTimeout(() => overlay.classList.add('show'), 10);
 }
 
 // --- UTILITAIRES CARTES ---
@@ -102,6 +120,15 @@ async function processStateQueue() {
     const nextState = payload.state;
     const action = payload.action;
 
+    // Si on a un état "LOBBY", on ne passe pas par les animations en jeu
+    if (nextState.status === 'LOBBY') {
+        gameState = nextState;
+        updateLobbyUI();
+        isAnimating = false;
+        processStateQueue();
+        return;
+    }
+
     if (action) {
         if (action.type === 'PLAY') {
             const isMe = action.playerId === myPeer.id;
@@ -139,10 +166,23 @@ async function processStateQueue() {
             }
             await new Promise(r => setTimeout(r, 300));
         }
+        else if (action.type === 'WIN') {
+            const winner = nextState.players[action.playerId];
+            showEndScreen(winner);
+        }
+        else if (action.type === 'RESTART') {
+            document.getElementById('end-screen').classList.remove('show');
+            setTimeout(() => { document.getElementById('end-screen').style.display = 'none'; }, 300);
+            showToast("La partie recommence !");
+            showGameScreen();
+        }
     }
     
     gameState = nextState;
-    updateUI();
+    if (gameState.status === 'PLAYING' || gameState.status === 'FINISHED') {
+        updateUI();
+    }
+    
     isAnimating = false;
     processStateQueue();
 }
@@ -154,8 +194,13 @@ function handleStatePayload(payload) {
         }
     }
     else if (payload.type === 'RECEIVE_CARDS') {
-        pendingDrawnCards.push(...payload.data.cards);
-        myHand.push(...payload.data.cards);
+        if (payload.data.override) {
+            myHand = [...payload.data.cards];
+            pendingDrawnCards = []; // Reset en cas de restart
+        } else {
+            pendingDrawnCards.push(...payload.data.cards);
+            myHand.push(...payload.data.cards);
+        }
     }
     else if (payload.type === 'STATE_UPDATE') {
         stateQueue.push(payload.data);
@@ -163,7 +208,7 @@ function handleStatePayload(payload) {
     }
 }
 
-// --- INITIALISATION DU MENU ---
+// --- INITIALISATION DU MENU ET LOBBY ---
 document.addEventListener('DOMContentLoaded', () => {
     const avatars = document.querySelectorAll('.avatar-option');
     avatars.forEach(img => {
@@ -175,19 +220,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const lobbyBtns = document.querySelectorAll('.btn-lobby');
     lobbyBtns.forEach(btn => {
-        if(btn.id !== 'btn-start-game') {
+        if(btn.id !== 'btn-start-game' && btn.id !== 'btn-restart-game') {
             btn.addEventListener('click', () => {
                 const pseudoInput = document.getElementById('pseudo').value.trim();
                 if (!pseudoInput) return alert("N'oublie pas ton pseudo !");
                 myPseudo = pseudoInput;
                 myAvatar = document.querySelector('.avatar-option.selected').getAttribute('data-avatar');
-                joinLobby(btn.getAttribute('data-lobby'));
+                currentLobbyId = btn.getAttribute('data-lobby');
+                joinLobby(currentLobbyId);
             });
         }
     });
 
     document.getElementById('btn-start-game').addEventListener('click', startGameHost);
+    document.getElementById('btn-restart-game').addEventListener('click', restartGameHost);
 });
+
+function showLobbyScreen() {
+    document.getElementById('menu-screen').classList.remove('active');
+    document.getElementById('game-screen').classList.remove('active');
+    document.getElementById('lobby-screen').classList.add('active');
+    document.getElementById('lobby-title').innerText = "Salle d'attente - Lobby " + currentLobbyId;
+
+    if (isHost) {
+        document.getElementById('btn-start-game').style.display = 'block';
+        document.getElementById('lobby-waiting-text').style.display = 'none';
+    } else {
+        document.getElementById('btn-start-game').style.display = 'none';
+        document.getElementById('lobby-waiting-text').style.display = 'block';
+    }
+}
+
+function updateLobbyUI() {
+    showLobbyScreen();
+    const list = document.getElementById('lobby-players-list');
+    list.innerHTML = '';
+    Object.keys(gameState.players).forEach(id => {
+        const p = gameState.players[id];
+        const div = document.createElement('div');
+        div.className = 'lobby-player-item glow';
+        div.innerHTML = `<img src="assets/avatars/${p.avatar}" alt="${p.pseudo}"><span>${p.pseudo}</span>`;
+        list.appendChild(div);
+    });
+}
 
 // --- PEERJS: CONNEXION ---
 function joinLobby(lobbyNumber) {
@@ -199,9 +274,7 @@ function joinLobby(lobbyNumber) {
 
     myPeer.on('open', (id) => {
         isHost = true;
-        statusText.innerText = "Lobby créé ! Tu es l'hôte.";
-        document.querySelector('.lobby-buttons').style.display = 'none';
-        document.getElementById('btn-start-game').style.display = 'block';
+        showLobbyScreen();
         addPlayerToState(id, myPseudo, myAvatar);
     });
 
@@ -209,12 +282,10 @@ function joinLobby(lobbyNumber) {
         if (err.type === 'unavailable-id') {
             myPeer = new Peer();
             myPeer.on('open', (myId) => {
-                statusText.innerText = "Rejoindre le lobby existant...";
                 hostConnection = myPeer.connect(targetLobbyId, { reliable: true });
                 
                 hostConnection.on('open', () => {
                     hostConnection.send({ type: 'JOIN', data: { pseudo: myPseudo, avatar: myAvatar } });
-                    showGameScreen();
                 });
                 hostConnection.on('data', handleStatePayload);
             });
@@ -253,7 +324,7 @@ function startGameHost() {
     gameState.playerOrder.forEach(id => {
         const hand = gameState.deck.splice(-7);
         gameState.players[id].handCount = 7;
-        sendCards(id, hand);
+        sendCards(id, hand, true); // true = override
     });
 
     let firstCard;
@@ -268,6 +339,40 @@ function startGameHost() {
     showGameScreen();
 }
 
+function restartGameHost() {
+    document.getElementById('end-screen').classList.remove('show');
+    setTimeout(() => document.getElementById('end-screen').style.display = 'none', 300);
+
+    gameState.status = 'PLAYING';
+    gameState.deck = shuffle(generateDeck());
+    gameState.discardPile = [];
+    gameState.currentTurnIndex = 0;
+    gameState.direction = 1;
+
+    gameState.playerOrder.forEach(id => {
+        gameState.players[id].handCount = 7;
+        gameState.players[id].unoVulnerable = false;
+    });
+
+    stateQueue = [];
+    isAnimating = false;
+
+    gameState.playerOrder.forEach(id => {
+        const hand = gameState.deck.splice(-7);
+        sendCards(id, hand, true); 
+    });
+
+    let firstCard;
+    do { firstCard = gameState.deck.pop(); } while(firstCard.includes('wild_plus4'));
+
+    gameState.discardPile.push(firstCard);
+    const parsedFirst = parseCard(firstCard);
+    gameState.currentColor = parsedFirst.color === 'none' ? 'red' : parsedFirst.color;
+    gameState.currentValue = parsedFirst.value;
+
+    broadcastState({ type: 'RESTART' });
+}
+
 function handleDataFromClient(clientId, payload) {
     if (payload.type === 'JOIN') addPlayerToState(clientId, payload.data.pseudo, payload.data.avatar);
     if(gameState.status !== 'PLAYING') return;
@@ -275,7 +380,6 @@ function handleDataFromClient(clientId, payload) {
     if (payload.type === 'PLAY_CARD') processPlayCard(clientId, payload.data.card, payload.data.chosenColor, payload.data.declaredUno);
     if (payload.type === 'DRAW_CARD') processDrawCard(clientId);
     
-    // Si un joueur dit UNO hors de son tour (ex: parce qu'il a oublié)
     if (payload.type === 'SAY_UNO_LATE') {
         const p = gameState.players[clientId];
         if(p.handCount === 1) {
@@ -298,7 +402,7 @@ function handleDataFromClient(clientId, payload) {
             const penalties = drawCardsFromDeck(4);
             targetPlayer.handCount += 4;
             targetPlayer.unoVulnerable = false;
-            sendCards(targetId, penalties);
+            sendCards(targetId, penalties, false);
             broadcastState({ type: 'SUCCESSFUL_DENOUNCE', denouncerId: clientId, targetId: targetId });
         }
     }
@@ -320,8 +424,8 @@ function processPlayCard(playerId, cardPlayed, chosenColor, declaredUno) {
     clearVulnerabilities();
 
     let triggerUnoCall = false;
+    let isWin = false;
 
-    // Si le joueur tombe à 1 carte
     if(gameState.players[playerId].handCount === 1) {
         if (declaredUno) {
             gameState.players[playerId].unoVulnerable = false;
@@ -329,6 +433,9 @@ function processPlayCard(playerId, cardPlayed, chosenColor, declaredUno) {
         } else {
             gameState.players[playerId].unoVulnerable = true; 
         }
+    } else if (gameState.players[playerId].handCount === 0) {
+        isWin = true;
+        gameState.status = 'FINISHED';
     }
 
     let skipNext = false;
@@ -344,19 +451,21 @@ function processPlayCard(playerId, cardPlayed, chosenColor, declaredUno) {
         applyPenaltyToNext(4);
         skipNext = true;
     }
-
-    checkWinCondition(playerId);
     
+    // On broadcast d'abord le coup joué
+    broadcastState({ type: 'PLAY', playerId, card: cardPlayed });
+
     if(triggerUnoCall) {
-        // Envoie l'animation UNO *avant* de passer au tour suivant
         broadcastState({ type: 'UNO_CALLED', playerId: playerId });
     }
 
-    if(gameState.status === 'PLAYING') {
+    if (isWin) {
+        broadcastState({ type: 'WIN', playerId: playerId });
+    } else if (gameState.status === 'PLAYING') {
         advanceTurn(skipNext ? 2 : 1);
+        // On broadcast un update vide pour actualiser l'UI du prochain joueur
+        broadcastState();
     }
-    
-    broadcastState({ type: 'PLAY', playerId, card: cardPlayed });
 }
 
 function processDrawCard(playerId) {
@@ -366,7 +475,7 @@ function processDrawCard(playerId) {
     clearVulnerabilities();
     const card = drawCardsFromDeck(1);
     gameState.players[playerId].handCount += 1;
-    sendCards(playerId, card);
+    sendCards(playerId, card, false);
     
     advanceTurn(1);
     broadcastState({ type: 'DRAW', playerId, amount: 1 });
@@ -377,7 +486,7 @@ function applyPenaltyToNext(amount) {
     let targetId = gameState.playerOrder[nextIndex];
     let cards = drawCardsFromDeck(amount);
     gameState.players[targetId].handCount += amount;
-    sendCards(targetId, cards);
+    sendCards(targetId, cards, false);
 }
 
 function drawCardsFromDeck(amount) {
@@ -399,18 +508,11 @@ function clearVulnerabilities() {
     Object.keys(gameState.players).forEach(p => gameState.players[p].unoVulnerable = false);
 }
 
-function checkWinCondition(playerId) {
-    if(gameState.players[playerId].handCount === 0) {
-        gameState.status = 'FINISHED';
-        setTimeout(() => alert(gameState.players[playerId].pseudo + " a gagné la partie !"), 1000);
-    }
-}
-
-function sendCards(targetId, cards) {
+function sendCards(targetId, cards, override = false) {
     if(targetId === myPeer.id) {
-        handleStatePayload({ type: 'RECEIVE_CARDS', data: { cards } });
+        handleStatePayload({ type: 'RECEIVE_CARDS', data: { cards, override } });
     } else {
-        connections[targetId].send({ type: 'RECEIVE_CARDS', data: { cards } });
+        connections[targetId].send({ type: 'RECEIVE_CARDS', data: { cards, override } });
     }
 }
 
@@ -424,14 +526,14 @@ function broadcastState(action = null) {
 
 // --- LOGIQUE CLIENT & UI ---
 function showGameScreen() {
-    document.getElementById('menu-screen').classList.remove('active');
+    document.getElementById('lobby-screen').classList.remove('active');
     document.getElementById('game-screen').classList.add('active');
     document.getElementById('my-pseudo').innerText = myPseudo;
     document.getElementById('my-avatar').src = `assets/avatars/${myAvatar}`;
 }
 
 function updateUI() {
-    if(gameState.status !== 'PLAYING') return;
+    if(gameState.status !== 'PLAYING' && gameState.status !== 'FINISHED') return;
 
     if(gameState.discardPile.length > 0) {
         const topCard = gameState.discardPile[gameState.discardPile.length - 1];
@@ -454,11 +556,10 @@ function updateUI() {
     const myInfoBlock = document.getElementById('my-player-info');
     isMyTurn ? myInfoBlock.classList.add('active-turn') : myInfoBlock.classList.remove('active-turn');
 
-    // Mise à jour de mon propre bouton UNO
     const myPlayerInfo = gameState.players[myId];
     const btnUno = document.getElementById('btn-say-uno');
     if (myPlayerInfo && myPlayerInfo.handCount === 1 && !myPlayerInfo.unoVulnerable) {
-        btnUno.style.backgroundColor = '#2b7a0b'; // Vert Safe
+        btnUno.style.backgroundColor = '#2b7a0b'; 
         btnUno.innerText = "PROTÉGÉ";
         btnUno.disabled = true;
     } else {
@@ -535,6 +636,7 @@ function renderMyHand() {
 let pendingCardPlayIndex = -1;
 
 function attemptPlayCard(index) {
+    if (gameState.status !== 'PLAYING') return;
     const currentTurnId = gameState.playerOrder[gameState.currentTurnIndex];
     if (currentTurnId !== myPeer.id) return; 
 
@@ -562,35 +664,35 @@ function finalizePlayCard(index, chosenColor) {
     const cardPlayed = myHand[index];
     myHand.splice(index, 1); 
     
-    // On embarque l'info du clic "UNO" directement dans l'action de jouer
     const declaredUno = amIProtectedUNO;
-    amIProtectedUNO = false; // Reset local
+    amIProtectedUNO = false; 
 
     sendAction({ type: 'PLAY_CARD', data: { card: cardPlayed, chosenColor, declaredUno: declaredUno } });
     renderMyHand(); 
 }
 
 document.getElementById('draw-pile').addEventListener('click', () => {
-    if(gameState.playerOrder[gameState.currentTurnIndex] === myPeer.id) {
+    if(gameState.status === 'PLAYING' && gameState.playerOrder[gameState.currentTurnIndex] === myPeer.id) {
         sendAction({ type: 'DRAW_CARD' });
     }
 });
 
-// GESTION DU CLIC SUR UNO
 document.getElementById('btn-say-uno').addEventListener('click', () => {
+    if (gameState.status !== 'PLAYING') return;
     if (myHand.length > 2) {
         showToast("Tu as trop de cartes !");
     } else if (myHand.length === 2) {
         amIProtectedUNO = true;
         showToast("UNO préparé ! Joue vite ta carte.");
     } else if (myHand.length === 1) {
-        // Au cas où le joueur a oublié de cliquer avant de jouer, il peut se rattraper
         sendAction({ type: 'SAY_UNO_LATE' });
     }
 });
 
 function denounceUno(targetId) {
-    sendAction({ type: 'DENOUNCE_UNO', data: { targetId } });
+    if (gameState.status === 'PLAYING') {
+        sendAction({ type: 'DENOUNCE_UNO', data: { targetId } });
+    }
 }
 
 function sendAction(payload) {
