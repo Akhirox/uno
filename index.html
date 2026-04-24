@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNO - Akhirox</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+    <div id="menu-screen" class="screen active">
+        <div class="menu-container">
+            <h1>UNO Web</h1>
+            
+            <div class="form-group">
+                <label for="pseudo">Ton Pseudo :</label>
+                <input type="text" id="pseudo" placeholder="Ex: Akhirox" maxlength="15">
+            </div>
+
+            <div class="form-group">
+                <label>Choisis ton Avatar :</label>
+                <div class="avatar-selection" id="avatar-selection">
+                    <img src="assets/avatars/pp_arnaud.png" class="avatar-option selected" data-avatar="pp_arnaud.png" alt="Arnaud">
+                    <img src="assets/avatars/pp_niels.png" class="avatar-option" data-avatar="pp_niels.png" alt="Niels">
+                    <img src="assets/avatars/pp_rioky.png" class="avatar-option" data-avatar="pp_rioky.png" alt="Rioky">
+                    <img src="assets/avatars/pp_thomas.png" class="avatar-option" data-avatar="pp_thomas.png" alt="Thomas">
+                    <img src="assets/avatars/pp_louis.png" class="avatar-option" data-avatar="pp_louis.png" alt="Louis">
+                    <img src="assets/avatars/pp_invite.png" class="avatar-option" data-avatar="pp_invite.png" alt="Invité">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Rejoindre un Lobby :</label>
+                <div class="lobby-buttons">
+                    <button class="btn-lobby" data-lobby="1">Lobby 1</button>
+                    <button class="btn-lobby" data-lobby="2">Lobby 2</button>
+                    <button class="btn-lobby" data-lobby="3">Lobby 3</button>
+                </div>
+            </div>
+            
+            <button id="btn-start-game" class="btn-lobby" style="display:none; width: 100%; margin-top: 15px; background-color: #2a9d8f;">Lancer la partie (Hôte)</button>
+            <p id="connection-status"></p>
+        </div>
+    </div>
+
+    <div id="game-screen" class="screen">
+        <div id="turn-indicator">En attente des joueurs...</div>
+
+        <div id="opponents-container"></div>
+
+        <div class="table-center">
+            <div class="deck" id="draw-pile" title="Piocher une carte">
+                <div class="card-back">UNO</div>
+            </div>
+            <div class="discard-pile-container">
+                <div class="discard-pile" id="discard-pile"></div>
+                <div id="current-color-indicator" class="color-indicator"></div>
+            </div>
+        </div>
+
+        <div class="player-area">
+            <div class="player-info" id="my-player-info">
+                <img id="my-avatar" src="" alt="Mon Avatar">
+                <span id="my-pseudo">Moi</span>
+                <button id="btn-say-uno" class="btn-uno action-btn">UNO !</button>
+            </div>
+            
+            <div id="my-hand" class="hand"></div>
+        </div>
+    </div>
+
+    <div id="color-picker-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h3>Choisis une couleur</h3>
+            <div class="color-grid">
+                <button class="color-btn" style="background-color: #005a9e;" data-color="blue"></button>
+                <button class="color-btn" style="background-color: #2b7a0b;" data-color="green"></button>
+                <button class="color-btn" style="background-color: #c1272d;" data-color="red"></button>
+                <button class="color-btn" style="background-color: #f7b731;" data-color="yellow"></button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
