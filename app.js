@@ -1,6 +1,7 @@
 // --- VARIABLES GLOBALES ---
 const ASSETS_PATH = 'assets/cards/';
 const LOBBY_PREFIX = 'akhirox-uno-lobby-';
+const CARD_BACK = 'uno_card.png';
 
 let myPseudo = '';
 let myAvatar = '';
@@ -8,23 +9,26 @@ let myPeer = null;
 let isHost = false;
 
 // Variables Hôte
-let connections = {}; // id -> connection
-let clients = []; // Liste des IDs des clients connectés
+let connections = {}; 
+let clients = []; 
 
-// Variables Client
+// Variables Client & Animations
 let hostConnection = null;
 let myHand = [];
 let amIProtectedUNO = false;
+let pendingDrawnCards = []; // Cartes qu'on m'a envoyé, en attente d'animation
+let stateQueue = []; // File d'attente pour séquencer les animations
+let isAnimating = false;
 
-// État Global du jeu (Géré par l'Hôte et synchronisé)
+// État Global du jeu
 let gameState = {
-    status: 'LOBBY', // LOBBY, PLAYING, FINISHED
+    status: 'LOBBY',
     deck: [],
     discardPile: [],
-    players: {}, // id: { pseudo, avatar, handCount, unoVulnerable: false }
-    playerOrder: [], // Tableau des IDs pour l'ordre
+    players: {}, 
+    playerOrder: [], 
     currentTurnIndex: 0,
-    direction: 1, // 1 ou -1
+    direction: 1,
     currentColor: '',
     currentValue: ''
 };
@@ -33,15 +37,99 @@ let gameState = {
 function parseCard(filename) {
     if(filename.includes('wild_plus4')) return { color: 'none', value: 'plus4', type: 'wild' };
     if(filename.includes('wild_card')) return { color: 'none', value: 'wild', type: 'wild' };
-    
-    let parts = filename.split('.')[0].split('_'); // ex: 7_red ou skip_blue
+    let parts = filename.split('.')[0].split('_'); 
     return { color: parts[1], value: parts[0], type: 'normal' };
 }
 
 function isCardPlayable(cardFile, currentState) {
     const card = parseCard(cardFile);
-    if(card.type === 'wild') return true; // Jouable n'importe quand
+    if(card.type === 'wild') return true; 
     return card.color === currentState.currentColor || card.value === currentState.currentValue;
+}
+
+// --- MOTEUR D'ANIMATION ---
+function flyCard(startEl, endEl, cardFile) {
+    return new Promise(resolve => {
+        if(!startEl || !endEl) return resolve();
+
+        const startRect = startEl.getBoundingClientRect();
+        const endRect = endEl.getBoundingClientRect();
+
+        const flyingCard = document.createElement('div');
+        flyingCard.className = 'card flying-card';
+        flyingCard.style.position = 'fixed';
+        flyingCard.style.left = `${startRect.left}px`;
+        flyingCard.style.top = `${startRect.top}px`;
+        flyingCard.style.backgroundImage = `url('${ASSETS_PATH}${cardFile}')`;
+        flyingCard.style.zIndex = '9999';
+
+        document.body.appendChild(flyingCard);
+
+        const deltaX = endRect.left - startRect.left;
+        const deltaY = endRect.top - startRect.top;
+
+        const animation = flyingCard.animate([
+            { transform: 'translate(0, 0) scale(1) rotate(0deg)' },
+            { transform: `translate(${deltaX}px, ${deltaY}px) scale(1.1) rotate(15deg)` } 
+        ], {
+            duration: 400,
+            easing: 'cubic-bezier(0.25, 1, 0.5, 1)'
+        });
+
+        animation.onfinish = () => {
+            flyingCard.remove();
+            resolve();
+        };
+    });
+}
+
+// Gère le déroulement visuel
+async function processStateQueue() {
+    if(isAnimating || stateQueue.length === 0) return;
+    isAnimating = true;
+    
+    const payload = stateQueue.shift();
+    const nextState = payload.state;
+    const action = payload.action;
+
+    if (action) {
+        if (action.type === 'PLAY') {
+            const isMe = action.playerId === myPeer.id;
+            const startEl = isMe ? document.getElementById('my-avatar') : document.getElementById(`avatar-${action.playerId}`);
+            const endEl = document.getElementById('discard-pile');
+            await flyCard(startEl, endEl, action.card);
+        } 
+        else if (action.type === 'DRAW') {
+            const startEl = document.getElementById('draw-pile');
+            const isMe = action.playerId === myPeer.id;
+            const endEl = isMe ? document.getElementById('my-avatar') : document.getElementById(`avatar-${action.playerId}`);
+            
+            for(let i=0; i<action.amount; i++) {
+                // Si c'est moi qui pioche, j'utilise la carte révélée dans pendingDrawnCards, sinon le dos
+                const cardImage = (isMe && pendingDrawnCards.length > 0) ? pendingDrawnCards.shift() : CARD_BACK;
+                flyCard(startEl, endEl, cardImage);
+                await new Promise(r => setTimeout(r, 150)); 
+            }
+            await new Promise(r => setTimeout(r, 300)); // Attendre la fin des vols
+        }
+    }
+    
+    gameState = nextState;
+    updateUI();
+    isAnimating = false;
+    processStateQueue();
+}
+
+function handleStatePayload(payload) {
+    if (payload.type === 'RECEIVE_CARDS') {
+        // On stocke les cartes pour l'animation face découverte
+        pendingDrawnCards.push(...payload.data.cards);
+        myHand.push(...payload.data.cards);
+    }
+    if (payload.type === 'STATE_UPDATE') {
+        stateQueue.push(payload.data);
+        processStateQueue();
+    }
 }
 
 // --- INITIALISATION DU MENU ---
@@ -97,7 +185,7 @@ function joinLobby(lobbyNumber) {
                     hostConnection.send({ type: 'JOIN', data: { pseudo: myPseudo, avatar: myAvatar } });
                     showGameScreen();
                 });
-                hostConnection.on('data', handleDataFromHost);
+                hostConnection.on('data', handleStatePayload);
             });
         } else {
             statusText.innerText = "Erreur : " + err.type;
@@ -107,10 +195,9 @@ function joinLobby(lobbyNumber) {
     myPeer.on('connection', (conn) => {
         if (!isHost) return;
         connections[conn.peer] = conn;
-        clients.push(conn.peer);
+        if(!clients.includes(conn.peer)) clients.push(conn.peer);
         
         conn.on('data', (data) => handleDataFromClient(conn.peer, data));
-        conn.on('close', () => { /* Gérer la déconnexion si besoin */ });
     });
 }
 
@@ -125,22 +212,18 @@ function startGameHost() {
     gameState.status = 'PLAYING';
     gameState.deck = shuffle(generateDeck());
     
-    // Distribution de 7 cartes
     gameState.playerOrder.forEach(id => {
         const hand = gameState.deck.splice(-7);
         gameState.players[id].handCount = 7;
         sendCards(id, hand);
     });
 
-    // Carte initiale
     let firstCard;
-    do {
-        firstCard = gameState.deck.pop();
-    } while(firstCard.includes('wild_plus4')); // On repose le +4 si c'est la première [cite: 41]
+    do { firstCard = gameState.deck.pop(); } while(firstCard.includes('wild_plus4'));
     
     gameState.discardPile.push(firstCard);
     const parsedFirst = parseCard(firstCard);
-    gameState.currentColor = parsedFirst.color === 'none' ? 'red' : parsedFirst.color; // Si Joker, Rouge par defaut au start
+    gameState.currentColor = parsedFirst.color === 'none' ? 'red' : parsedFirst.color; 
     gameState.currentValue = parsedFirst.value;
 
     broadcastState();
@@ -148,17 +231,11 @@ function startGameHost() {
 }
 
 function handleDataFromClient(clientId, payload) {
-    if (payload.type === 'JOIN') {
-        addPlayerToState(clientId, payload.data.pseudo, payload.data.avatar);
-    }
+    if (payload.type === 'JOIN') addPlayerToState(clientId, payload.data.pseudo, payload.data.avatar);
     if(gameState.status !== 'PLAYING') return;
 
-    if (payload.type === 'PLAY_CARD') {
-        processPlayCard(clientId, payload.data.card, payload.data.chosenColor);
-    }
-    if (payload.type === 'DRAW_CARD') {
-        processDrawCard(clientId);
-    }
+    if (payload.type === 'PLAY_CARD') processPlayCard(clientId, payload.data.card, payload.data.chosenColor);
+    if (payload.type === 'DRAW_CARD') processDrawCard(clientId);
     if (payload.type === 'SAY_UNO') {
         gameState.players[clientId].unoVulnerable = false;
         broadcastState();
@@ -170,16 +247,16 @@ function handleDataFromClient(clientId, payload) {
             gameState.players[targetId].handCount += 4;
             gameState.players[targetId].unoVulnerable = false;
             sendCards(targetId, penalties);
-            broadcastState();
+            broadcastState({ type: 'DRAW', playerId: targetId, amount: 4 });
         }
     }
 }
 
 function processPlayCard(playerId, cardPlayed, chosenColor) {
     const expectedPlayerId = gameState.playerOrder[gameState.currentTurnIndex];
-    if(playerId !== expectedPlayerId) return; // Pas son tour
+    if(playerId !== expectedPlayerId) return; 
 
-    if(!isCardPlayable(cardPlayed, gameState)) return; // Triche/Erreur
+    if(!isCardPlayable(cardPlayed, gameState)) return; 
 
     gameState.discardPile.push(cardPlayed);
     gameState.players[playerId].handCount--;
@@ -188,20 +265,16 @@ function processPlayCard(playerId, cardPlayed, chosenColor) {
     gameState.currentColor = parsed.color === 'none' ? chosenColor : parsed.color;
     gameState.currentValue = parsed.value;
 
-    // Levée de vulnérabilité UNO de l'ancien tour
     clearVulnerabilities();
 
-    // Règle UNO: si le joueur passe à 1 carte, il est vulnérable sauf s'il a cliqué
     if(gameState.players[playerId].handCount === 1) {
         gameState.players[playerId].unoVulnerable = true; 
-        // Le client enverra SAY_UNO s'il a cliqué.
     }
 
-    // Effets Spéciaux
     let skipNext = false;
     if(parsed.value === 'reverse') {
         gameState.direction *= -1;
-        if(gameState.playerOrder.length === 2) skipNext = true; // Reverse = Skip à 2 joueurs
+        if(gameState.playerOrder.length === 2) skipNext = true; 
     } else if (parsed.value === 'skip') {
         skipNext = true;
     } else if (parsed.value === 'plus2') {
@@ -216,6 +289,8 @@ function processPlayCard(playerId, cardPlayed, chosenColor) {
     if(gameState.status === 'PLAYING') {
         advanceTurn(skipNext ? 2 : 1);
     }
+    
+    broadcastState({ type: 'PLAY', playerId, card: cardPlayed });
 }
 
 function processDrawCard(playerId) {
@@ -228,6 +303,7 @@ function processDrawCard(playerId) {
     sendCards(playerId, card);
     
     advanceTurn(1);
+    broadcastState({ type: 'DRAW', playerId, amount: 1 });
 }
 
 function applyPenaltyToNext(amount) {
@@ -236,11 +312,11 @@ function applyPenaltyToNext(amount) {
     let cards = drawCardsFromDeck(amount);
     gameState.players[targetId].handCount += amount;
     sendCards(targetId, cards);
+    // On ne broadcast pas la pioche ici, le broadcast final du PLAY fera double emploi. On ajoutera l'anim si besoin.
 }
 
 function drawCardsFromDeck(amount) {
     if(gameState.deck.length < amount) {
-        // Remélanger la défausse (sauf la première)
         const top = gameState.discardPile.pop();
         gameState.deck = shuffle(gameState.discardPile);
         gameState.discardPile = [top];
@@ -252,7 +328,6 @@ function advanceTurn(steps) {
     let numPlayers = gameState.playerOrder.length;
     let move = (steps * gameState.direction) % numPlayers;
     gameState.currentTurnIndex = (gameState.currentTurnIndex + move + numPlayers) % numPlayers;
-    broadcastState();
 }
 
 function clearVulnerabilities() {
@@ -262,39 +337,30 @@ function clearVulnerabilities() {
 function checkWinCondition(playerId) {
     if(gameState.players[playerId].handCount === 0) {
         gameState.status = 'FINISHED';
-        broadcastState();
-        alert(gameState.players[playerId].pseudo + " a gagné la partie !");
+        setTimeout(() => alert(gameState.players[playerId].pseudo + " a gagné la partie !"), 1000);
     }
 }
 
 function sendCards(targetId, cards) {
     if(targetId === myPeer.id) {
-        myHand.push(...cards);
-        renderMyHand();
+        handleStatePayload({ type: 'RECEIVE_CARDS', data: { cards } });
     } else {
         connections[targetId].send({ type: 'RECEIVE_CARDS', data: { cards } });
     }
 }
 
-function broadcastState() {
+function broadcastState(action = null) {
+    const payload = { type: 'STATE_UPDATE', data: { state: gameState, action } };
+    
     clients.forEach(id => {
-        connections[id].send({ type: 'STATE_UPDATE', data: { state: gameState } });
+        connections[id].send(payload);
     });
-    updateUI();
+    
+    // L'hôte s'envoie la mise à jour à lui-même pour l'interface
+    handleStatePayload(JSON.parse(JSON.stringify(payload)));
 }
 
 // --- LOGIQUE CLIENT & UI ---
-function handleDataFromHost(payload) {
-    if (payload.type === 'STATE_UPDATE') {
-        gameState = payload.data.state;
-        updateUI();
-    }
-    if (payload.type === 'RECEIVE_CARDS') {
-        myHand.push(...payload.data.cards);
-        renderMyHand();
-    }
-}
-
 function showGameScreen() {
     document.getElementById('menu-screen').classList.remove('active');
     document.getElementById('game-screen').classList.add('active');
@@ -305,13 +371,11 @@ function showGameScreen() {
 function updateUI() {
     if(gameState.status !== 'PLAYING') return;
 
-    // Défausse
     if(gameState.discardPile.length > 0) {
         const topCard = gameState.discardPile[gameState.discardPile.length - 1];
         document.getElementById('discard-pile').innerHTML = `<div class="card" style="background-image: url('${ASSETS_PATH}${topCard}')"></div>`;
     }
     
-    // Indicateur de couleur active
     const colorInd = document.getElementById('current-color-indicator');
     if(gameState.currentColor) {
         colorInd.style.display = 'block';
@@ -320,18 +384,14 @@ function updateUI() {
     }
 
     const currentTurnId = gameState.playerOrder[gameState.currentTurnIndex];
-    const myId = isHost ? myPeer.id : myPeer.id; // Pour le client, myPeer.id est son ID
+    const myId = myPeer.id; 
     const isMyTurn = currentTurnId === myId;
 
-    // Indicateur de tour global
-    const turnText = isMyTurn ? "C'est ton tour !" : `Tour de ${gameState.players[currentTurnId].pseudo}`;
-    document.getElementById('turn-indicator').innerText = turnText;
-
-    // Moi
+    document.getElementById('turn-indicator').innerText = isMyTurn ? "C'est ton tour !" : `Tour de ${gameState.players[currentTurnId].pseudo}`;
+    
     const myInfoBlock = document.getElementById('my-player-info');
     isMyTurn ? myInfoBlock.classList.add('active-turn') : myInfoBlock.classList.remove('active-turn');
 
-    // Adversaires
     const oppContainer = document.getElementById('opponents-container');
     oppContainer.innerHTML = '';
     
@@ -341,8 +401,9 @@ function updateUI() {
             const isTurn = id === currentTurnId;
             const oppDiv = document.createElement('div');
             oppDiv.className = `opponent ${isTurn ? 'active-turn' : ''}`;
+            // On ajoute l'ID sur l'avatar pour pouvoir le cibler avec l'animation
             oppDiv.innerHTML = `
-                <img src="assets/avatars/${p.avatar}" alt="${p.pseudo}">
+                <img id="avatar-${id}" src="assets/avatars/${p.avatar}" alt="${p.pseudo}">
                 <div class="opponent-info">
                     <span>${p.pseudo} - ${p.handCount} cartes</span>
                     <button class="btn-uno" onclick="denounceUno('${id}')" ${!p.unoVulnerable ? 'disabled' : ''}>Dénoncer</button>
@@ -358,20 +419,14 @@ function updateUI() {
 function renderMyHand() {
     const handDiv = document.getElementById('my-hand');
     handDiv.innerHTML = '';
-    
-    const currentTurnId = gameState.playerOrder[gameState.currentTurnIndex];
-    const isMyTurn = currentTurnId === (isHost ? myPeer.id : myPeer.id);
 
     myHand.forEach((card, index) => {
         const cardEl = document.createElement('div');
-        const playable = isMyTurn && isCardPlayable(card, gameState);
-        
-        cardEl.className = `card ${playable ? '' : 'unplayable'}`;
+        // J'ai enlevé la classe 'unplayable' pour ne plus les assombrir
+        cardEl.className = 'card';
         cardEl.style.backgroundImage = `url('${ASSETS_PATH}${card}')`;
         
-        cardEl.onclick = () => {
-            if(playable) attemptPlayCard(index);
-        };
+        cardEl.onclick = () => attemptPlayCard(index);
         handDiv.appendChild(cardEl);
     });
 }
@@ -380,9 +435,13 @@ function renderMyHand() {
 let pendingCardPlayIndex = -1;
 
 function attemptPlayCard(index) {
+    const currentTurnId = gameState.playerOrder[gameState.currentTurnIndex];
+    if (currentTurnId !== myPeer.id) return; // Pas mon tour
+
     const card = myHand[index];
+    if (!isCardPlayable(card, gameState)) return; // Coup invalide, on ne fait rien (pas d'aide visuelle)
+
     const parsed = parseCard(card);
-    
     if(parsed.type === 'wild') {
         pendingCardPlayIndex = index;
         document.getElementById('color-picker-modal').style.display = 'flex';
@@ -391,7 +450,6 @@ function attemptPlayCard(index) {
     }
 }
 
-// Géré par la modale
 document.querySelectorAll('.color-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         const color = btn.getAttribute('data-color');
@@ -402,27 +460,24 @@ document.querySelectorAll('.color-btn').forEach(btn => {
 
 function finalizePlayCard(index, chosenColor) {
     const cardPlayed = myHand[index];
-    myHand.splice(index, 1); // Retire localement
+    myHand.splice(index, 1); 
     
-    // Si on a 1 carte restante après ça et qu'on a protégé son UNO
     if(myHand.length === 1 && amIProtectedUNO) {
         sendAction({ type: 'SAY_UNO' });
         amIProtectedUNO = false;
     }
 
     sendAction({ type: 'PLAY_CARD', data: { card: cardPlayed, chosenColor } });
-    renderMyHand();
+    renderMyHand(); // On l'enlève de la main en attendant l'animation serveur
 }
 
 document.getElementById('draw-pile').addEventListener('click', () => {
-    const isMyTurn = gameState.playerOrder[gameState.currentTurnIndex] === (isHost ? myPeer.id : myPeer.id);
-    if(isMyTurn) {
+    if(gameState.playerOrder[gameState.currentTurnIndex] === myPeer.id) {
         sendAction({ type: 'DRAW_CARD' });
     }
 });
 
 document.getElementById('btn-say-uno').addEventListener('click', () => {
-    // Si on a 2 cartes et qu'on s'apprête à jouer, ou qu'on a déjà 1 carte
     amIProtectedUNO = true;
     if(myHand.length === 1 || myHand.length === 2) {
         sendAction({ type: 'SAY_UNO' });

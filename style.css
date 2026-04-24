@@ -1,7 +1,7 @@
 :root {
-    --bg-color: #1e1e2f;
-    --primary: #e63946;
-    --text: #f1faee;
+    --bg-color: #0d0d0d;
+    --primary: #ff8c00; /* Dark Orange */
+    --text: #ffa500; /* Orange */
     --card-width: 100px;
     --card-height: 150px;
 }
@@ -11,61 +11,70 @@ body { background-color: var(--bg-color); color: var(--text); overflow: hidden; 
 .screen { display: none; width: 100vw; height: 100vh; }
 .screen.active { display: flex; }
 
+.glow { text-shadow: 0 0 10px var(--primary), 0 0 20px var(--primary); color: var(--primary); font-weight: bold; }
+
 /* MENU */
 #menu-screen { justify-content: center; align-items: center; }
-.menu-container { background: #2a2a40; padding: 30px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 400px; text-align: center; }
-.menu-container h1 { color: var(--primary); margin-bottom: 20px; font-size: 2.5rem; text-shadow: 2px 2px 0 #000; }
+.menu-container { background: #1a1a1a; padding: 30px; border-radius: 12px; box-shadow: 0 0 20px rgba(255, 140, 0, 0.2); width: 400px; text-align: center; border: 1px solid #331f00; }
+.menu-container h1 { margin-bottom: 20px; font-size: 2.5rem; }
 .form-group { margin-bottom: 20px; text-align: left; }
 .form-group label { display: block; margin-bottom: 8px; font-weight: bold; }
-input[type="text"] { width: 100%; padding: 10px; border-radius: 6px; border: none; outline: none; background: #1e1e2f; color: #fff; }
+input[type="text"] { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--primary); outline: none; background: #0d0d0d; color: var(--text); }
 .avatar-selection { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
 .avatar-option { width: 50px; height: 50px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: transform 0.2s; }
 .avatar-option:hover { transform: scale(1.1); }
-.avatar-option.selected { border-color: var(--primary); box-shadow: 0 0 10px var(--primary); }
+.avatar-option.selected { border-color: var(--primary); box-shadow: 0 0 15px var(--primary); }
 .lobby-buttons { display: flex; justify-content: space-between; gap: 10px; }
-.btn-lobby { flex: 1; padding: 10px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
-.btn-lobby:hover { background: #c12734; }
-#connection-status { margin-top: 15px; font-style: italic; color: #a8dadc; }
+.btn-lobby { flex: 1; padding: 10px; background: var(--primary); color: #000; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s; text-transform: uppercase; letter-spacing: 1px;}
+.btn-lobby:hover { background: #ffaa33; box-shadow: 0 0 10px var(--primary); transform: scale(1.05);}
+#connection-status { margin-top: 15px; font-style: italic; color: #ffaa33; }
 
 /* JEU */
-#game-screen { flex-direction: column; justify-content: space-between; position: relative; background: radial-gradient(circle, #2a4035 0%, #111e15 100%); }
-#turn-indicator { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 20px; font-weight: bold; font-size: 1.2rem; z-index: 100; }
+#game-screen { flex-direction: column; justify-content: space-between; position: relative; background: radial-gradient(circle, #1a1510 0%, #0d0d0d 100%); }
+#turn-indicator { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 20px; font-size: 1.2rem; z-index: 100; border: 1px solid var(--primary);}
 
 #opponents-container { display: flex; justify-content: center; gap: 40px; padding: 20px; height: 150px; }
-.opponent { display: flex; flex-direction: column; align-items: center; gap: 10px; opacity: 0.5; transition: opacity 0.3s;}
+.opponent { display: flex; flex-direction: column; align-items: center; gap: 10px; opacity: 0.6; transition: all 0.3s;}
 .opponent.active-turn { opacity: 1; transform: scale(1.1); }
-.opponent img { width: 60px; height: 60px; border-radius: 50%; border: 2px solid #fff; }
+.opponent img { width: 60px; height: 60px; border-radius: 50%; border: 2px solid var(--primary); }
 .opponent-info { display: flex; align-items: center; gap: 10px; flex-direction: column; }
-.opponent-info span { font-size: 0.9rem; background: rgba(0,0,0,0.5); padding: 2px 8px; border-radius: 10px;}
+.opponent-info span { font-size: 0.9rem; background: rgba(0,0,0,0.7); padding: 2px 8px; border-radius: 10px; color: var(--text);}
 
-.btn-uno { background: #ffb703; color: #000; border: none; border-radius: 4px; padding: 4px 8px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+.btn-uno { background: var(--primary); color: #000; border: none; border-radius: 4px; padding: 4px 8px; font-weight: bold; cursor: pointer; box-shadow: 0 0 10px rgba(255,140,0,0.5); }
 .btn-uno:active { transform: scale(0.95); }
-.btn-uno:disabled { background: #ccc; cursor: not-allowed; }
+.btn-uno:disabled { background: #444; color: #777; box-shadow: none; cursor: not-allowed; }
 
 /* Table */
 .table-center { display: flex; justify-content: center; align-items: center; gap: 50px; flex-grow: 1; }
 .deck, .discard-pile { width: var(--card-width); height: var(--card-height); position: relative; perspective: 1000px; }
-.card-back { width: 100%; height: 100%; background: repeating-linear-gradient(45deg, #000, #000 10px, #111 10px, #111 20px); border: 5px solid #fff; border-radius: 8px; display: flex; justify-content: center; align-items: center; color: var(--primary); font-weight: bold; font-size: 1.5rem; box-shadow: 2px 2px 10px rgba(0,0,0,0.5); cursor: pointer; transition: transform 0.2s; }
-.deck .card-back:hover { transform: translateY(-5px); }
-.card { width: var(--card-width); height: var(--card-height); background-size: cover; background-position: center; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); transition: transform 0.3s; transform-origin: bottom center; }
+
+/* On utilise l'asset uno_card.png pour le dos */
+.card-back { width: 100%; height: 100%; background-image: url('assets/cards/uno_card.png'); background-size: 100% 100%; border-radius: 8px; box-shadow: 0 4px 15px rgba(255, 140, 0, 0.2); cursor: pointer; transition: transform 0.2s; }
+.deck .card-back:hover { transform: translateY(-5px); box-shadow: 0 4px 20px rgba(255, 140, 0, 0.4); }
+
+.card { width: var(--card-width); height: var(--card-height); background-size: cover; background-position: center; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.8); transition: transform 0.3s; transform-origin: bottom center; }
 .discard-pile-container { position: relative; }
-.color-indicator { position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; display: none; }
+.color-indicator { position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; display: none; box-shadow: 0 0 10px rgba(255,255,255,0.5);}
 
 /* Joueur */
 .player-area { display: flex; flex-direction: column; align-items: center; padding-bottom: 20px; }
-.player-info { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 30px; transition: all 0.3s;}
-.player-info.active-turn { box-shadow: 0 0 15px #e63946; border: 1px solid #e63946; }
-.player-info img { width: 40px; height: 40px; border-radius: 50%; }
+.player-info { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 30px; transition: all 0.3s; border: 1px solid transparent;}
+.player-info.active-turn { box-shadow: 0 0 15px var(--primary); border-color: var(--primary); }
+.player-info img { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--primary);}
+
 .hand { display: flex; justify-content: center; gap: -40px; perspective: 1000px; max-width: 90vw; overflow-x: auto; padding: 20px 0;}
 .hand .card { margin-left: -40px; position: relative; cursor: pointer; }
 .hand .card:first-child { margin-left: 0; }
 .hand .card:hover { transform: translateY(-30px) rotateY(5deg) scale(1.1); z-index: 10; }
-.hand .card.unplayable { filter: brightness(0.5); cursor: not-allowed; }
 
 /* Modale */
-.modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-.modal-content { background: #2a2a40; padding: 20px; border-radius: 10px; text-align: center; }
-.modal-content h3 { margin-bottom: 15px; }
-.color-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.color-btn { width: 80px; height: 80px; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: transform 0.1s;}
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.9); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+.modal-content { background: #1a1a1a; padding: 30px; border-radius: 10px; text-align: center; border: 1px solid var(--primary); box-shadow: 0 0 30px rgba(255,140,0,0.3);}
+.modal-content h3 { margin-bottom: 20px; font-size: 1.5rem;}
+.color-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+.color-btn { width: 80px; height: 80px; border: 2px solid transparent; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.5); transition: all 0.1s;}
+.color-btn:hover { border-color: #fff; transform: scale(1.1);}
 .color-btn:active { transform: scale(0.95); }
+
+/* Animation Utils */
+.flying-card { pointer-events: none; }
