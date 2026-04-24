@@ -11,15 +11,15 @@
 
     <div id="menu-screen" class="screen active">
         <div class="menu-container">
-            <h1>UNO Web</h1>
+            <h1 class="glow">UNO Web</h1>
             
             <div class="form-group">
-                <label for="pseudo">Ton Pseudo :</label>
+                <label for="pseudo" class="glow">Ton Pseudo :</label>
                 <input type="text" id="pseudo" placeholder="Ex: Akhirox" maxlength="15">
             </div>
 
             <div class="form-group">
-                <label>Choisis ton Avatar :</label>
+                <label class="glow">Choisis ton Avatar :</label>
                 <div class="avatar-selection" id="avatar-selection">
                     <img src="assets/avatars/pp_arnaud.png" class="avatar-option selected" data-avatar="pp_arnaud.png" alt="Arnaud">
                     <img src="assets/avatars/pp_niels.png" class="avatar-option" data-avatar="pp_niels.png" alt="Niels">
@@ -31,7 +31,7 @@
             </div>
 
             <div class="form-group">
-                <label>Rejoindre un Lobby :</label>
+                <label class="glow">Rejoindre un Lobby :</label>
                 <div class="lobby-buttons">
                     <button class="btn-lobby" data-lobby="1">Lobby 1</button>
                     <button class="btn-lobby" data-lobby="2">Lobby 2</button>
@@ -39,19 +39,19 @@
                 </div>
             </div>
             
-            <button id="btn-start-game" class="btn-lobby" style="display:none; width: 100%; margin-top: 15px; background-color: #2a9d8f;">Lancer la partie (Hôte)</button>
+            <button id="btn-start-game" class="btn-lobby" style="display:none; width: 100%; margin-top: 15px;">Lancer la partie (Hôte)</button>
             <p id="connection-status"></p>
         </div>
     </div>
 
     <div id="game-screen" class="screen">
-        <div id="turn-indicator">En attente des joueurs...</div>
+        <div id="turn-indicator" class="glow">En attente des joueurs...</div>
 
         <div id="opponents-container"></div>
 
         <div class="table-center">
             <div class="deck" id="draw-pile" title="Piocher une carte">
-                <div class="card-back">UNO</div>
+                <div class="card-back"></div>
             </div>
             <div class="discard-pile-container">
                 <div class="discard-pile" id="discard-pile"></div>
@@ -62,7 +62,7 @@
         <div class="player-area">
             <div class="player-info" id="my-player-info">
                 <img id="my-avatar" src="" alt="Mon Avatar">
-                <span id="my-pseudo">Moi</span>
+                <span id="my-pseudo" class="glow">Moi</span>
                 <button id="btn-say-uno" class="btn-uno action-btn">UNO !</button>
             </div>
             
@@ -72,7 +72,7 @@
 
     <div id="color-picker-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
-            <h3>Choisis une couleur</h3>
+            <h3 class="glow">Choisis une couleur</h3>
             <div class="color-grid">
                 <button class="color-btn" style="background-color: #005a9e;" data-color="blue"></button>
                 <button class="color-btn" style="background-color: #2b7a0b;" data-color="green"></button>

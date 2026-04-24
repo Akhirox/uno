@@ -16,8 +16,8 @@ let clients = [];
 let hostConnection = null;
 let myHand = [];
 let amIProtectedUNO = false;
-let pendingDrawnCards = []; // Cartes qu'on m'a envoyé, en attente d'animation
-let stateQueue = []; // File d'attente pour séquencer les animations
+let pendingDrawnCards = []; 
+let stateQueue = []; 
 let isAnimating = false;
 
 // État Global du jeu
@@ -83,7 +83,6 @@ function flyCard(startEl, endEl, cardFile) {
     });
 }
 
-// Gère le déroulement visuel
 async function processStateQueue() {
     if(isAnimating || stateQueue.length === 0) return;
     isAnimating = true;
@@ -105,12 +104,11 @@ async function processStateQueue() {
             const endEl = isMe ? document.getElementById('my-avatar') : document.getElementById(`avatar-${action.playerId}`);
             
             for(let i=0; i<action.amount; i++) {
-                // Si c'est moi qui pioche, j'utilise la carte révélée dans pendingDrawnCards, sinon le dos
                 const cardImage = (isMe && pendingDrawnCards.length > 0) ? pendingDrawnCards.shift() : CARD_BACK;
                 flyCard(startEl, endEl, cardImage);
                 await new Promise(r => setTimeout(r, 150)); 
             }
-            await new Promise(r => setTimeout(r, 300)); // Attendre la fin des vols
+            await new Promise(r => setTimeout(r, 300)); 
         }
     }
     
@@ -122,7 +120,6 @@ async function processStateQueue() {
 
 function handleStatePayload(payload) {
     if (payload.type === 'RECEIVE_CARDS') {
-        // On stocke les cartes pour l'animation face découverte
         pendingDrawnCards.push(...payload.data.cards);
         myHand.push(...payload.data.cards);
     }
@@ -312,7 +309,6 @@ function applyPenaltyToNext(amount) {
     let cards = drawCardsFromDeck(amount);
     gameState.players[targetId].handCount += amount;
     sendCards(targetId, cards);
-    // On ne broadcast pas la pioche ici, le broadcast final du PLAY fera double emploi. On ajoutera l'anim si besoin.
 }
 
 function drawCardsFromDeck(amount) {
@@ -351,12 +347,9 @@ function sendCards(targetId, cards) {
 
 function broadcastState(action = null) {
     const payload = { type: 'STATE_UPDATE', data: { state: gameState, action } };
-    
     clients.forEach(id => {
         connections[id].send(payload);
     });
-    
-    // L'hôte s'envoie la mise à jour à lui-même pour l'interface
     handleStatePayload(JSON.parse(JSON.stringify(payload)));
 }
 
@@ -395,22 +388,44 @@ function updateUI() {
     const oppContainer = document.getElementById('opponents-container');
     oppContainer.innerHTML = '';
     
-    gameState.playerOrder.forEach(id => {
-        if (id !== myId) {
-            const p = gameState.players[id];
-            const isTurn = id === currentTurnId;
-            const oppDiv = document.createElement('div');
-            oppDiv.className = `opponent ${isTurn ? 'active-turn' : ''}`;
-            // On ajoute l'ID sur l'avatar pour pouvoir le cibler avec l'animation
-            oppDiv.innerHTML = `
-                <img id="avatar-${id}" src="assets/avatars/${p.avatar}" alt="${p.pseudo}">
-                <div class="opponent-info">
-                    <span>${p.pseudo} - ${p.handCount} cartes</span>
-                    <button class="btn-uno" onclick="denounceUno('${id}')" ${!p.unoVulnerable ? 'disabled' : ''}>Dénoncer</button>
-                </div>
-            `;
-            oppContainer.appendChild(oppDiv);
+    const opponents = gameState.playerOrder.filter(id => id !== myId);
+    const oppCount = opponents.length;
+
+    opponents.forEach((id, index) => {
+        const p = gameState.players[id];
+        const isTurn = id === currentTurnId;
+        
+        // Calcul pour placer en arc de cercle
+        const minAngle = 20;
+        const maxAngle = 160;
+        let angle = 90;
+        if (oppCount > 1) {
+            angle = maxAngle - ((maxAngle - minAngle) / (oppCount - 1)) * index;
         }
+        const rad = angle * (Math.PI / 180);
+        const leftPercent = 50 + 40 * Math.cos(rad);
+        const topPercent = 35 - 30 * Math.sin(rad); // On les garde bien espacés du centre
+
+        const oppDiv = document.createElement('div');
+        oppDiv.className = `opponent ${isTurn ? 'active-turn' : ''}`;
+        oppDiv.style.left = `${leftPercent}%`;
+        oppDiv.style.top = `${topPercent}%`;
+
+        // Génération des mini-cartes
+        let cardsHTML = '';
+        for(let i=0; i<p.handCount; i++) {
+            cardsHTML += `<div class="mini-card"></div>`;
+        }
+
+        oppDiv.innerHTML = `
+            <img id="avatar-${id}" src="assets/avatars/${p.avatar}" alt="${p.pseudo}">
+            <div class="opponent-info">
+                <span class="glow">${p.pseudo}</span>
+                <div class="opponent-hand">${cardsHTML}</div>
+                <button class="btn-uno" onclick="denounceUno('${id}')" ${!p.unoVulnerable ? 'disabled' : ''}>Dénoncer</button>
+            </div>
+        `;
+        oppContainer.appendChild(oppDiv);
     });
 
     renderMyHand();
@@ -422,7 +437,6 @@ function renderMyHand() {
 
     myHand.forEach((card, index) => {
         const cardEl = document.createElement('div');
-        // J'ai enlevé la classe 'unplayable' pour ne plus les assombrir
         cardEl.className = 'card';
         cardEl.style.backgroundImage = `url('${ASSETS_PATH}${card}')`;
         
@@ -436,10 +450,10 @@ let pendingCardPlayIndex = -1;
 
 function attemptPlayCard(index) {
     const currentTurnId = gameState.playerOrder[gameState.currentTurnIndex];
-    if (currentTurnId !== myPeer.id) return; // Pas mon tour
+    if (currentTurnId !== myPeer.id) return; 
 
     const card = myHand[index];
-    if (!isCardPlayable(card, gameState)) return; // Coup invalide, on ne fait rien (pas d'aide visuelle)
+    if (!isCardPlayable(card, gameState)) return; 
 
     const parsed = parseCard(card);
     if(parsed.type === 'wild') {
@@ -468,7 +482,7 @@ function finalizePlayCard(index, chosenColor) {
     }
 
     sendAction({ type: 'PLAY_CARD', data: { card: cardPlayed, chosenColor } });
-    renderMyHand(); // On l'enlève de la main en attendant l'animation serveur
+    renderMyHand(); 
 }
 
 document.getElementById('draw-pile').addEventListener('click', () => {

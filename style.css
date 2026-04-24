@@ -1,7 +1,7 @@
 :root {
     --bg-color: #0d0d0d;
-    --primary: #ff8c00; /* Dark Orange */
-    --text: #ffa500; /* Orange */
+    --primary: #ff8c00; 
+    --text: #ffa500; 
     --card-width: 100px;
     --card-height: 150px;
 }
@@ -21,7 +21,7 @@ body { background-color: var(--bg-color); color: var(--text); overflow: hidden; 
 .form-group label { display: block; margin-bottom: 8px; font-weight: bold; }
 input[type="text"] { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--primary); outline: none; background: #0d0d0d; color: var(--text); }
 .avatar-selection { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
-.avatar-option { width: 50px; height: 50px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: transform 0.2s; }
+.avatar-option { width: 100px; height: 100px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: transform 0.2s; }
 .avatar-option:hover { transform: scale(1.1); }
 .avatar-option.selected { border-color: var(--primary); box-shadow: 0 0 15px var(--primary); }
 .lobby-buttons { display: flex; justify-content: space-between; gap: 10px; }
@@ -30,25 +30,32 @@ input[type="text"] { width: 100%; padding: 10px; border-radius: 6px; border: 1px
 #connection-status { margin-top: 15px; font-style: italic; color: #ffaa33; }
 
 /* JEU */
-#game-screen { flex-direction: column; justify-content: space-between; position: relative; background: radial-gradient(circle, #1a1510 0%, #0d0d0d 100%); }
+#game-screen { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle, #1a1510 0%, #0d0d0d 100%); }
 #turn-indicator { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 20px; font-size: 1.2rem; z-index: 100; border: 1px solid var(--primary);}
 
-#opponents-container { display: flex; justify-content: center; gap: 40px; padding: 20px; height: 150px; }
-.opponent { display: flex; flex-direction: column; align-items: center; gap: 10px; opacity: 0.6; transition: all 0.3s;}
-.opponent.active-turn { opacity: 1; transform: scale(1.1); }
-.opponent img { width: 60px; height: 60px; border-radius: 50%; border: 2px solid var(--primary); }
-.opponent-info { display: flex; align-items: center; gap: 10px; flex-direction: column; }
-.opponent-info span { font-size: 0.9rem; background: rgba(0,0,0,0.7); padding: 2px 8px; border-radius: 10px; color: var(--text);}
+/* Conteneur des adversaires : Arc de cercle */
+#opponents-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+.opponent { position: absolute; pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 5px; opacity: 0.6; transition: all 0.3s; transform: translate(-50%, -50%) scale(1); }
+.opponent.active-turn { opacity: 1; transform: translate(-50%, -50%) scale(1.15); filter: drop-shadow(0 0 15px var(--primary)); }
+.opponent img { width: 120px; height: 120px; border-radius: 50%; border: 3px solid var(--primary); object-fit: cover;}
+
+.opponent-info { display: flex; align-items: center; gap: 5px; flex-direction: column; margin-top: -5px;}
+.opponent-info span { font-size: 1rem; background: rgba(0,0,0,0.8); padding: 2px 10px; border-radius: 10px; color: var(--text); border: 1px solid #444;}
+
+/* Mini Cartes des adversaires */
+.opponent-hand { display: flex; justify-content: center; margin-top: 5px; }
+.mini-card { width: 25px; height: 38px; background-image: url('assets/cards/uno_card.png'); background-size: cover; border-radius: 3px; box-shadow: 0 2px 4px rgba(0,0,0,0.8); border: 1px solid rgba(255,255,255,0.1); margin-left: -15px; }
+.mini-card:first-child { margin-left: 0; }
 
 .btn-uno { background: var(--primary); color: #000; border: none; border-radius: 4px; padding: 4px 8px; font-weight: bold; cursor: pointer; box-shadow: 0 0 10px rgba(255,140,0,0.5); }
 .btn-uno:active { transform: scale(0.95); }
-.btn-uno:disabled { background: #444; color: #777; box-shadow: none; cursor: not-allowed; }
+.btn-uno:disabled { background: #444; color: #777; box-shadow: none; cursor: not-allowed; opacity: 0.5; }
 
 /* Table */
-.table-center { display: flex; justify-content: center; align-items: center; gap: 50px; flex-grow: 1; }
+.table-center { display: flex; justify-content: center; align-items: center; gap: 50px; z-index: 5; margin-bottom: 100px; /* Décale le centre vers le haut pour laisser la place au joueur */ }
 .deck, .discard-pile { width: var(--card-width); height: var(--card-height); position: relative; perspective: 1000px; }
 
-/* On utilise l'asset uno_card.png pour le dos */
+/* Dos de carte propre, sans texte */
 .card-back { width: 100%; height: 100%; background-image: url('assets/cards/uno_card.png'); background-size: 100% 100%; border-radius: 8px; box-shadow: 0 4px 15px rgba(255, 140, 0, 0.2); cursor: pointer; transition: transform 0.2s; }
 .deck .card-back:hover { transform: translateY(-5px); box-shadow: 0 4px 20px rgba(255, 140, 0, 0.4); }
 
@@ -57,12 +64,14 @@ input[type="text"] { width: 100%; padding: 10px; border-radius: 6px; border: 1px
 .color-indicator { position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; display: none; box-shadow: 0 0 10px rgba(255,255,255,0.5);}
 
 /* Joueur */
-.player-area { display: flex; flex-direction: column; align-items: center; padding-bottom: 20px; }
+.player-area { position: absolute; bottom: 0; width: 100%; display: flex; flex-direction: column; align-items: center; padding-bottom: 20px; z-index: 20;}
 .player-info { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 30px; transition: all 0.3s; border: 1px solid transparent;}
 .player-info.active-turn { box-shadow: 0 0 15px var(--primary); border-color: var(--primary); }
-.player-info img { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--primary);}
+.player-info img { width: 80px; height: 80px; border-radius: 50%; border: 2px solid var(--primary); object-fit: cover;}
 
-.hand { display: flex; justify-content: center; gap: -40px; perspective: 1000px; max-width: 90vw; overflow-x: auto; padding: 20px 0;}
+/* Barre de défilement supprimée visuellement */
+.hand { display: flex; justify-content: center; gap: -40px; perspective: 1000px; max-width: 90vw; overflow-x: auto; padding: 20px 0; -ms-overflow-style: none; scrollbar-width: none; }
+.hand::-webkit-scrollbar { display: none; }
 .hand .card { margin-left: -40px; position: relative; cursor: pointer; }
 .hand .card:first-child { margin-left: 0; }
 .hand .card:hover { transform: translateY(-30px) rotateY(5deg) scale(1.1); z-index: 10; }
