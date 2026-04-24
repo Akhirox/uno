@@ -15,7 +15,7 @@ let clients = [];
 // Variables Client & Animations
 let hostConnection = null;
 let myHand = [];
-let amIProtectedUNO = false;
+let amIProtectedUNO = false; // Etat "préparé"
 let pendingDrawnCards = []; 
 let stateQueue = []; 
 let isAnimating = false;
@@ -52,7 +52,6 @@ function showBigMessage(avatar, title, desc) {
     setTimeout(() => overlay.classList.remove('show'), 3500); 
 }
 
-
 // --- UTILITAIRES CARTES ---
 function parseCard(filename) {
     if(filename.includes('wild_plus4')) return { color: 'none', value: 'plus4', type: 'wild' };
@@ -71,7 +70,6 @@ function isCardPlayable(cardFile, currentState) {
 function flyCard(startEl, endEl, cardFile) {
     return new Promise(resolve => {
         if(!startEl || !endEl) return resolve();
-
         const startRect = startEl.getBoundingClientRect();
         const endRect = endEl.getBoundingClientRect();
 
@@ -82,7 +80,6 @@ function flyCard(startEl, endEl, cardFile) {
         flyingCard.style.top = `${startRect.top}px`;
         flyingCard.style.backgroundImage = `url('${ASSETS_PATH}${cardFile}')`;
         flyingCard.style.zIndex = '9999';
-
         document.body.appendChild(flyingCard);
 
         const deltaX = endRect.left - startRect.left;
@@ -91,15 +88,9 @@ function flyCard(startEl, endEl, cardFile) {
         const animation = flyingCard.animate([
             { transform: 'translate(0, 0) scale(1) rotate(0deg)' },
             { transform: `translate(${deltaX}px, ${deltaY}px) scale(1.1) rotate(15deg)` } 
-        ], {
-            duration: 400,
-            easing: 'cubic-bezier(0.25, 1, 0.5, 1)'
-        });
+        ], { duration: 400, easing: 'cubic-bezier(0.25, 1, 0.5, 1)' });
 
-        animation.onfinish = () => {
-            flyingCard.remove();
-            resolve();
-        };
+        animation.onfinish = () => { flyingCard.remove(); resolve(); };
     });
 }
 
@@ -139,7 +130,6 @@ async function processStateQueue() {
             showBigMessage(denouncer.avatar, "DÉNONCÉ !", `${denouncer.pseudo} a dénoncé ${target.pseudo} !`);
             await new Promise(r => setTimeout(r, 2500));
             
-            // Animation des 4 cartes de pénalité
             const startEl = document.getElementById('draw-pile');
             const isMe = action.targetId === myPeer.id;
             const endEl = isMe ? document.getElementById('my-avatar') : document.getElementById(`avatar-${action.targetId}`);
@@ -237,7 +227,6 @@ function joinLobby(lobbyNumber) {
         if (!isHost) return;
         connections[conn.peer] = conn;
         if(!clients.includes(conn.peer)) clients.push(conn.peer);
-        
         conn.on('data', (data) => handleDataFromClient(conn.peer, data));
     });
 }
@@ -283,12 +272,16 @@ function handleDataFromClient(clientId, payload) {
     if (payload.type === 'JOIN') addPlayerToState(clientId, payload.data.pseudo, payload.data.avatar);
     if(gameState.status !== 'PLAYING') return;
 
-    if (payload.type === 'PLAY_CARD') processPlayCard(clientId, payload.data.card, payload.data.chosenColor);
+    if (payload.type === 'PLAY_CARD') processPlayCard(clientId, payload.data.card, payload.data.chosenColor, payload.data.declaredUno);
     if (payload.type === 'DRAW_CARD') processDrawCard(clientId);
     
-    if (payload.type === 'SAY_UNO') {
-        gameState.players[clientId].unoVulnerable = false;
-        broadcastState({ type: 'UNO_CALLED', playerId: clientId });
+    // Si un joueur dit UNO hors de son tour (ex: parce qu'il a oublié)
+    if (payload.type === 'SAY_UNO_LATE') {
+        const p = gameState.players[clientId];
+        if(p.handCount === 1) {
+            p.unoVulnerable = false;
+            broadcastState({ type: 'UNO_CALLED', playerId: clientId });
+        }
     }
     
     if (payload.type === 'DENOUNCE_UNO') {
@@ -296,13 +289,12 @@ function handleDataFromClient(clientId, payload) {
         const targetPlayer = gameState.players[targetId];
 
         if (targetPlayer.handCount > 1) {
-            sendDirectAction(clientId, { type: 'TOAST', message: `${targetPlayer.pseudo} a plus d'une carte` });
+            sendDirectAction(clientId, { type: 'TOAST', message: `${targetPlayer.pseudo} a plus d'une carte.` });
         } 
         else if (!targetPlayer.unoVulnerable) {
-            sendDirectAction(clientId, { type: 'TOAST', message: `${targetPlayer.pseudo} a déjà dit UNO !` });
+            sendDirectAction(clientId, { type: 'TOAST', message: `${targetPlayer.pseudo} est protégé !` });
         } 
         else {
-            // Dénonciation réussie
             const penalties = drawCardsFromDeck(4);
             targetPlayer.handCount += 4;
             targetPlayer.unoVulnerable = false;
@@ -312,7 +304,7 @@ function handleDataFromClient(clientId, payload) {
     }
 }
 
-function processPlayCard(playerId, cardPlayed, chosenColor) {
+function processPlayCard(playerId, cardPlayed, chosenColor, declaredUno) {
     const expectedPlayerId = gameState.playerOrder[gameState.currentTurnIndex];
     if(playerId !== expectedPlayerId) return; 
 
@@ -327,8 +319,16 @@ function processPlayCard(playerId, cardPlayed, chosenColor) {
 
     clearVulnerabilities();
 
+    let triggerUnoCall = false;
+
+    // Si le joueur tombe à 1 carte
     if(gameState.players[playerId].handCount === 1) {
-        gameState.players[playerId].unoVulnerable = true; 
+        if (declaredUno) {
+            gameState.players[playerId].unoVulnerable = false;
+            triggerUnoCall = true;
+        } else {
+            gameState.players[playerId].unoVulnerable = true; 
+        }
     }
 
     let skipNext = false;
@@ -346,6 +346,12 @@ function processPlayCard(playerId, cardPlayed, chosenColor) {
     }
 
     checkWinCondition(playerId);
+    
+    if(triggerUnoCall) {
+        // Envoie l'animation UNO *avant* de passer au tour suivant
+        broadcastState({ type: 'UNO_CALLED', playerId: playerId });
+    }
+
     if(gameState.status === 'PLAYING') {
         advanceTurn(skipNext ? 2 : 1);
     }
@@ -448,6 +454,19 @@ function updateUI() {
     const myInfoBlock = document.getElementById('my-player-info');
     isMyTurn ? myInfoBlock.classList.add('active-turn') : myInfoBlock.classList.remove('active-turn');
 
+    // Mise à jour de mon propre bouton UNO
+    const myPlayerInfo = gameState.players[myId];
+    const btnUno = document.getElementById('btn-say-uno');
+    if (myPlayerInfo && myPlayerInfo.handCount === 1 && !myPlayerInfo.unoVulnerable) {
+        btnUno.style.backgroundColor = '#2b7a0b'; // Vert Safe
+        btnUno.innerText = "PROTÉGÉ";
+        btnUno.disabled = true;
+    } else {
+        btnUno.style.backgroundColor = ''; 
+        btnUno.innerText = "UNO !";
+        btnUno.disabled = false;
+    }
+
     const oppContainer = document.getElementById('opponents-container');
     oppContainer.innerHTML = '';
     
@@ -457,6 +476,7 @@ function updateUI() {
     opponents.forEach((id, index) => {
         const p = gameState.players[id];
         const isTurn = id === currentTurnId;
+        const isProtected = p.handCount === 1 && !p.unoVulnerable;
         
         const minAngle = 20;
         const maxAngle = 160;
@@ -478,12 +498,18 @@ function updateUI() {
             cardsHTML += `<div class="mini-card"></div>`;
         }
 
+        const badgeHTML = isProtected ? `<div class="uno-protected-badge">UNO!</div>` : '';
+        const denounceDisabled = !p.unoVulnerable || p.handCount !== 1 ? 'disabled' : '';
+
         oppDiv.innerHTML = `
-            <img id="avatar-${id}" src="assets/avatars/${p.avatar}" alt="${p.pseudo}">
+            <div style="position: relative;">
+                <img id="avatar-${id}" src="assets/avatars/${p.avatar}" alt="${p.pseudo}">
+                ${badgeHTML}
+            </div>
             <div class="opponent-info">
                 <span class="glow">${p.pseudo}</span>
                 <div class="opponent-hand">${cardsHTML}</div>
-                <button class="btn-uno" onclick="denounceUno('${id}')">Dénoncer</button>
+                <button class="btn-uno" onclick="denounceUno('${id}')" ${denounceDisabled}>Dénoncer</button>
             </div>
         `;
         oppContainer.appendChild(oppDiv);
@@ -500,7 +526,6 @@ function renderMyHand() {
         const cardEl = document.createElement('div');
         cardEl.className = 'card';
         cardEl.style.backgroundImage = `url('${ASSETS_PATH}${card}')`;
-        
         cardEl.onclick = () => attemptPlayCard(index);
         handDiv.appendChild(cardEl);
     });
@@ -537,12 +562,11 @@ function finalizePlayCard(index, chosenColor) {
     const cardPlayed = myHand[index];
     myHand.splice(index, 1); 
     
-    if(myHand.length === 1 && amIProtectedUNO) {
-        sendAction({ type: 'SAY_UNO' });
-        amIProtectedUNO = false;
-    }
+    // On embarque l'info du clic "UNO" directement dans l'action de jouer
+    const declaredUno = amIProtectedUNO;
+    amIProtectedUNO = false; // Reset local
 
-    sendAction({ type: 'PLAY_CARD', data: { card: cardPlayed, chosenColor } });
+    sendAction({ type: 'PLAY_CARD', data: { card: cardPlayed, chosenColor, declaredUno: declaredUno } });
     renderMyHand(); 
 }
 
@@ -552,14 +576,16 @@ document.getElementById('draw-pile').addEventListener('click', () => {
     }
 });
 
-// NOUVEAU FEEDBACK BOUTON UNO
+// GESTION DU CLIC SUR UNO
 document.getElementById('btn-say-uno').addEventListener('click', () => {
-    // Règle : on doit avoir 1 carte, ou être sur le point de jouer (2 cartes)
-    if(myHand.length > 2) {
-        showToast("Vous avez trop de cartes");
-    } else {
+    if (myHand.length > 2) {
+        showToast("Tu as trop de cartes !");
+    } else if (myHand.length === 2) {
         amIProtectedUNO = true;
-        sendAction({ type: 'SAY_UNO' });
+        showToast("UNO préparé ! Joue vite ta carte.");
+    } else if (myHand.length === 1) {
+        // Au cas où le joueur a oublié de cliquer avant de jouer, il peut se rattraper
+        sendAction({ type: 'SAY_UNO_LATE' });
     }
 });
 
