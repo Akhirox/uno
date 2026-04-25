@@ -22,7 +22,6 @@ let stateQueue = [];
 let isAnimating = false;
 
 // --- CONFIGURATION RESEAU P2P ---
-// On force les serveurs STUN de Google pour aider à traverser les routeurs/box internet
 const peerConfig = {
     config: {
         'iceServers': [
@@ -33,7 +32,7 @@ const peerConfig = {
             { urls: 'stun:stun4.l.google.com:19302' }
         ]
     },
-    debug: 2 // Affiche les logs réseau dans la console (F12) pour t'aider à débugger
+    debug: 2 
 };
 
 // État Global du jeu
@@ -237,6 +236,12 @@ function handleStatePayload(payload) {
 
 // --- INITIALISATION DU MENU ET LOBBY ---
 document.addEventListener('DOMContentLoaded', () => {
+    // Navigation depuis l'accueil
+    document.getElementById('btn-play-now').addEventListener('click', () => {
+        document.getElementById('welcome-screen').classList.remove('active');
+        document.getElementById('menu-screen').classList.add('active');
+    });
+
     const avatars = document.querySelectorAll('.avatar-option');
     avatars.forEach(img => {
         img.addEventListener('click', () => {
@@ -247,7 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const lobbyBtns = document.querySelectorAll('.btn-lobby');
     lobbyBtns.forEach(btn => {
-        if(btn.id !== 'btn-start-game' && btn.id !== 'btn-restart-game') {
+        if(btn.id !== 'btn-start-game' && btn.id !== 'btn-restart-game' && btn.id !== 'btn-play-now') {
             btn.addEventListener('click', () => {
                 const pseudoInput = document.getElementById('pseudo').value.trim();
                 if (!pseudoInput) return alert("N'oublie pas ton pseudo !");
@@ -304,7 +309,6 @@ function joinLobby(lobbyNumber) {
     statusText.innerText = "Connexion en cours...";
     const targetLobbyId = LOBBY_PREFIX + lobbyNumber;
 
-    // Tentative de devenir l'hôte avec la config STUN
     myPeer = new Peer(targetLobbyId, peerConfig);
 
     myPeer.on('open', (id) => {
@@ -314,10 +318,9 @@ function joinLobby(lobbyNumber) {
     });
 
     myPeer.on('error', (err) => {
-        console.error("PeerJS Error:", err); // Utile pour débugger avec F12
+        console.error("PeerJS Error:", err); 
 
         if (err.type === 'unavailable-id') {
-            // L'ID est pris, le lobby existe, on se connecte en client (avec config STUN aussi)
             myPeer = new Peer(peerConfig);
             myPeer.on('open', (myId) => {
                 hostConnection = myPeer.connect(targetLobbyId, { reliable: true });
@@ -361,7 +364,6 @@ function addPlayerToState(id, pseudo, avatar) {
 }
 
 function startGameHost() {
-    // Sécurité Anti Double-Clic
     if (gameState.status !== 'LOBBY') return; 
 
     gameState.status = 'PLAYING';
